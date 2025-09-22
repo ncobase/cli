@@ -1,0 +1,6 @@
+.idea/
+.vscode/
+dist/
+build/
+ncore
+.DS_Store
