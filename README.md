@@ -1,6 +1,6 @@
 # Ncobase CLI
 
-A command-line tool for generating and managing Ncobase projects and components.
+Command-line tool for generating Ncobase projects and components.
 
 ## Installation
 

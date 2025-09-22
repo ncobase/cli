@@ -3,13 +3,9 @@ package commands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/ncobase/cli/commands/create"
 	"github.com/ncobase/cli/commands/migrate"
-	"github.com/ncobase/ncore/config"
-	extm "github.com/ncobase/ncore/extension/manager"
-	"github.com/ncobase/ncore/utils"
 	"github.com/ncobase/cli/version"
 
 	"github.com/spf13/cobra"
@@ -23,21 +19,9 @@ func NewStartCommand() *cobra.Command {
 		Use:   "start",
 		Short: "Start the NCore server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadConfig(configFile)
-			if err != nil {
-				return fmt.Errorf("failed to load config: %v", err)
-			}
-
-			m, err := extm.NewManager(cfg)
-			if err != nil {
-				return fmt.Errorf("failed to create manager: %v", err)
-			}
-
-			if err := m.LoadPlugins(); err != nil {
-				return fmt.Errorf("failed to load plugins: %v", err)
-			}
-
-			fmt.Println("Starting NCore server...")
+			fmt.Println("This CLI generates code projects.")
+			fmt.Println("To run servers, use generated project code.")
+			fmt.Println("See github.com/ncobase/ncore for library functionality.")
 			return nil
 		},
 	}
@@ -66,56 +50,26 @@ func newPluginListCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List installed plugins",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadConfig("config.yaml")
-			if err != nil {
-				return err
-			}
-
-			m, err := extm.NewManager(cfg)
-			if err != nil {
-				return err
-			}
-
-			plugins := m.GetExtensions()
-			for name, plugin := range plugins {
-				fmt.Printf("Plugin: %s\n", name)
-				metadata := plugin.Instance.GetMetadata()
-				fmt.Printf("  Version: %s\n", metadata.Version)
-				fmt.Printf("  Type: %s\n", metadata.Type)
-				fmt.Printf("  Status: %s\n\n", plugin.Instance.Status())
-			}
-
+			fmt.Println("This CLI generates code projects.")
+			fmt.Println("Plugin management belongs in generated projects.")
+			fmt.Println("Use 'nco create' to generate projects.")
 			return nil
 		},
 	}
 }
 
 func newPluginInstallCommand() *cobra.Command {
-	var source string
-
 	cmd := &cobra.Command{
 		Use:   "install [name]",
 		Short: "Install a plugin",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			cfg, err := config.LoadConfig("config.yaml")
-			if err != nil {
-				return err
-			}
-
-			destPath := filepath.Join(cfg.Extension.Path, name+utils.GetPlatformExt())
-			if err := os.Link(source, destPath); err != nil {
-				return fmt.Errorf("failed to install plugin: %v", err)
-			}
-
-			fmt.Printf("Plugin %s installed successfully\n", name)
+			fmt.Println("This CLI generates code projects.")
+			fmt.Println("Plugin installation belongs in generated projects.")
+			fmt.Println("Use 'nco create' to generate projects.")
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&source, "source", "s", "", "source path of the plugin")
-	_ = cmd.MarkFlagRequired("source")
 	return cmd
 }
 

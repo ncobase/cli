@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ncobase/cli/generator/templates"
-	"github.com/ncobase/ncore/utils"
+	"github.com/ncobase/cli/utils"
 )
 
 // Options defines generation options
@@ -175,9 +175,7 @@ func Generate(opts *Options) error {
 	}
 
 	// Check if component already exists
-	if exists, err := utils.PathExists(basePath); err != nil {
-		return fmt.Errorf("error checking existence: %v", err)
-	} else if exists {
+	if utils.PathExists(basePath) {
 		return fmt.Errorf("'%s' already exists in %s", opts.Name, extDescriptions[extType])
 	}
 
