@@ -8,26 +8,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newDownCommand() *cobra.Command {
-	var (
-		migrationsPath string
-		databaseURL    string
-	)
+func newNewCommand() *cobra.Command {
+	var migrationsPath string
 
 	cmd := &cobra.Command{
-		Use:   "down",
-		Short: "Rollback the last migration",
+		Use:     "new [name]",
+		Aliases: []string{"create"},
+		Short:   "Create a new migration file",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			
 			if migrationsPath == "" {
 				migrationsPath = "file://data/ent/migrate/migrations"
 			}
-			
-			if databaseURL == "" {
-				return fmt.Errorf("database url is required (use -u or --url)")
-			}
 
-			// atlas migrate down --dir ... --url ...
-			cArgs := []string{"migrate", "down", "--dir", migrationsPath, "--url", databaseURL}
+			// atlas migrate new name --dir ...
+			cArgs := []string{"migrate", "new", name, "--dir", migrationsPath}
 			
 			fmt.Printf("Running: atlas %v\n", cArgs)
 			
@@ -41,6 +38,5 @@ func newDownCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&migrationsPath, "dir", "d", "", "migrations directory path (default: file://data/ent/migrate/migrations)")
-	cmd.Flags().StringVarP(&databaseURL, "url", "u", "", "database url (e.g. mysql://user:pass@localhost:3306/db)")
 	return cmd
 }

@@ -19,7 +19,9 @@ func NewRootCmd() *cobra.Command {
 		NewDocsCommand(),
 		NewVersionCommand(),
 		NewCreateCommand(),
+		NewInitCommand(),
 		NewMigrateCommand(),
+		NewSchemaCommand(),
 	)
 
 	return rootCmd

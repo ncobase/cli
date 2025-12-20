@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"github.com/ncobase/cli/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -12,12 +13,19 @@ func NewCommand() *cobra.Command {
 		Aliases: []string{"m"},
 		Short:   "Database migration commands",
 		Long:    `Manage database migrations.`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return utils.CheckAndInstallAtlas()
+		},
 	}
 
 	cmd.AddCommand(
-		newUpCommand(),
+		newApplyCommand(),
 		newDownCommand(),
-		newCreateCommand(),
+		newNewCommand(),
+		newDiffCommand(),
+		newHashCommand(),
+		newStatusCommand(),
+		newLintCommand(),
 	)
 
 	return cmd
