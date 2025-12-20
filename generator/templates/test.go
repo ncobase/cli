@@ -123,3 +123,143 @@ func TestService(t *testing.T) {
 	})
 }`)
 }
+
+// StandaloneHandlerTestTemplate generates handler test template for standalone apps
+
+func StandaloneHandlerTestTemplate(name, moduleName string) string {
+
+	return fmt.Sprintf(`package tests
+
+
+
+import (
+
+	"net/http"
+
+	"net/http/httptest"
+
+	"testing"
+
+
+
+	"github.com/gin-gonic/gin"
+
+	"{{ .PackagePath }}/handler"
+
+	"{{ .PackagePath }}/service"
+
+)
+
+
+
+func TestHandler(t *testing.T) {
+
+	gin.SetMode(gin.TestMode)
+
+	
+
+	// Mock service
+
+	// In a real test, you would use a mock implementation of repository
+
+	s := service.New(nil)
+
+	h := handler.New(s)
+
+
+
+	t.Run("get example", func(t *testing.T) {
+
+		r := gin.New()
+
+		r.GET("/example", h.GetExample)
+
+
+
+		w := httptest.NewRecorder()
+
+		req := httptest.NewRequest("GET", "/example", nil)
+
+
+
+		r.ServeHTTP(w, req)
+
+
+
+		if w.Code != http.StatusOK {
+
+			t.Errorf("want status 200, got %%d", w.Code)
+
+		}
+
+	})
+
+}
+
+`)
+
+}
+
+
+
+// StandaloneServiceTestTemplate generates service test template for standalone apps
+
+func StandaloneServiceTestTemplate(name, moduleName string) string {
+
+	return fmt.Sprintf(`package tests
+
+
+
+import (
+
+	"context"
+
+	"testing"
+
+
+
+	"{{ .PackagePath }}/service"
+
+)
+
+
+
+func TestService(t *testing.T) {
+
+	ctx := context.Background()
+
+	// Mock repository
+
+	s := service.New(nil)
+
+
+
+	t.Run("get example", func(t *testing.T) {
+
+		resp, err := s.GetExample(ctx)
+
+		if err != nil {
+
+			t.Errorf("unexpected error: %%v", err)
+
+		}
+
+		if resp == nil {
+
+			t.Error("response should not be nil")
+
+		}
+
+		if resp.Name != "Example Model" {
+
+			t.Errorf("want name 'Example Model', got %%s", resp.Name)
+
+		}
+
+	})
+
+}
+
+`)
+
+}

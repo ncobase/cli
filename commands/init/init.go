@@ -9,14 +9,11 @@ import (
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init [name]",
-		Short: "Initialize a new NCore project",
-		Long:  `Initialize a new NCore project with standard structure.`,
-		Args:  cobra.MaximumNArgs(1),
+		Short: "Initialize a new project",
+		Long:  `Initialize a new project with standard structure.`,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := "ncore-app"
-			if len(args) > 0 {
-				name = args[0]
-			}
+			name := args[0]
 
 			opts := generator.DefaultOptions()
 			opts.Name = name

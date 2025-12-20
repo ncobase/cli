@@ -68,26 +68,31 @@ func Generate(opts *Options) error {
 
 	// Determine module name if not provided
 	if opts.ModuleName == "" {
-		// Try to detect from go.mod file
-		goModPath := filepath.Join(opts.OutputPath, "go.mod")
-		if utils.FileExists(goModPath) {
-			content, err := os.ReadFile(goModPath)
-			if err == nil {
-				lines := strings.Split(string(content), "\n")
-				for _, line := range lines {
-					if strings.HasPrefix(line, "module ") {
-						opts.ModuleName = strings.TrimSpace(strings.TrimPrefix(line, "module "))
-						break
+		if opts.Standalone {
+			// For standalone apps, default module name is the project name
+			opts.ModuleName = opts.Name
+		} else {
+			// Try to detect from go.mod file
+			goModPath := filepath.Join(opts.OutputPath, "go.mod")
+			if utils.FileExists(goModPath) {
+				content, err := os.ReadFile(goModPath)
+				if err == nil {
+					lines := strings.Split(string(content), "\n")
+					for _, line := range lines {
+						if strings.HasPrefix(line, "module ") {
+							opts.ModuleName = strings.TrimSpace(strings.TrimPrefix(line, "module "))
+							break
+						}
 					}
 				}
 			}
-		}
 
-		// If still empty, use a default
-		if opts.ModuleName == "" {
-			// Use current directory name as module name
-			dirs := strings.Split(opts.OutputPath, string(os.PathSeparator))
-			opts.ModuleName = dirs[len(dirs)-1]
+			// If still empty, use a default
+			if opts.ModuleName == "" {
+				// Use current directory name as module name
+				dirs := strings.Split(opts.OutputPath, string(os.PathSeparator))
+				opts.ModuleName = dirs[len(dirs)-1]
+			}
 		}
 	}
 
@@ -107,6 +112,11 @@ func Generate(opts *Options) error {
 		}
 
 		extType = opts.Type
+
+		// Check if directory already exists
+		if utils.PathExists(basePath) {
+			return fmt.Errorf("directory '%s' already exists", basePath)
+		}
 
 		// Create base directory
 		if err := utils.EnsureDir(basePath); err != nil {
@@ -210,27 +220,48 @@ func Generate(opts *Options) error {
 			return fmt.Errorf("failed to create cmd directory: %v", err)
 		}
 
+		// Create internal/server directory
+		serverPath := filepath.Join(basePath, "internal/server")
+		if err := utils.EnsureDir(serverPath); err != nil {
+			return fmt.Errorf("failed to create internal/server directory: %v", err)
+		}
+
+		// Create internal/middleware directory
+		middlewarePath := filepath.Join(basePath, "internal/middleware")
+		if err := utils.EnsureDir(middlewarePath); err != nil {
+			return fmt.Errorf("failed to create internal/middleware directory: %v", err)
+		}
+
+		// Create internal/version directory
+		versionPath := filepath.Join(basePath, "internal/version")
+		if err := utils.EnsureDir(versionPath); err != nil {
+			return fmt.Errorf("failed to create internal/version directory: %v", err)
+		}
+
 		// Create files in cmd directory
 		files := map[string]string{
-			"main.go": templates.CmdMainTemplate(data.Name, data.ExtType, data.ModuleName),
-		}
+			"cmd/main.go": templates.CmdMainTemplate(data.Name, data.ExtType, data.PackagePath),
 
-		// Create provider directory
-		providerPath := filepath.Join(cmdPath, "provider")
-		if err := utils.EnsureDir(providerPath); err != nil {
-			return fmt.Errorf("failed to create provider directory: %v", err)
-		}
+			// Internal Server
+			"internal/server/server.go": templates.ServerTemplate(data.PackagePath),
+			"internal/server/http.go":   templates.ServerHTTPTemplate(data.PackagePath),
+			"internal/server/exts.go":   templates.ServerExtsTemplate(data.PackagePath),
 
-		// Add provider files
-		files[filepath.Join("provider", "server.go")] = templates.CmdServerTemplate(data.Name, data.ExtType, data.ModuleName)
-		files[filepath.Join("provider", "extension.go")] = templates.CmdExtensionTemplate(data.Name, data.ExtType, data.ModuleName)
-		files[filepath.Join("provider", "gin.go")] = templates.CmdGinTemplate(data.Name, data.ExtType, data.ModuleName)
-		files[filepath.Join("provider", "rest.go")] = templates.CmdRestTemplate(data.Name, data.ExtType, data.ModuleName)
+			// Internal Middleware
+			"internal/middleware/cors.go":             templates.MiddlewareCORSTemplate(),
+			"internal/middleware/security_headers.go": templates.MiddlewareSecurityHeadersTemplate(),
+			"internal/middleware/trace.go":            templates.MiddlewareTraceTemplate(),
+			"internal/middleware/logger.go":           templates.MiddlewareLoggerTemplate(),
+			"internal/middleware/client_info.go":      templates.MiddlewareClientInfoTemplate(),
+
+			// Internal Version
+			"internal/version/version.go": templates.VersionTemplate(),
+		}
 
 		// Write files
 		for filePath, tmpl := range files {
 			if err := utils.WriteTemplateFile(
-				filepath.Join(cmdPath, filePath),
+				filepath.Join(basePath, filePath),
 				tmpl,
 				data,
 			); err != nil {
@@ -251,6 +282,9 @@ func Generate(opts *Options) error {
 
 // getPackagePath returns the package path based on options
 func getPackagePath(opts *Options) string {
+	if opts.Standalone {
+		return opts.ModuleName
+	}
 	switch opts.Type {
 	case "custom":
 		if opts.CustomDir == "" {
@@ -345,12 +379,23 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 	// Create essential directories
 	directories := []string{
 		"cmd",
-		"cmd/provider",
-		"config",
+		"internal/server",
+		"internal/middleware",
+		"internal/version",
+		"internal/config",
 		"handler",
-		"model",
+		"data",
+		"data/model",
+		"data/repository",
 		"service",
 	}
+
+	if data.UseEnt {
+		directories = append(directories, "data/ent", "data/schema")
+	}
+
+	// Add migrates directory
+	directories = append(directories, "data/migrates")
 
 	if data.WithTest {
 		directories = append(directories, "tests")
@@ -362,25 +407,67 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		}
 	}
 
+	// Select data template
+	selectDataTemplate := func(data templates.Data) string {
+		if data.UseEnt {
+			return templates.DataTemplateWithEnt(data.Name, data.ExtType)
+		}
+		if data.UseGorm {
+			return templates.DataTemplateWithGorm(data.Name, data.ExtType)
+		}
+		if data.UseMongo {
+			return templates.DataTemplateWithMongo(data.Name, data.ExtType)
+		}
+		return templates.DataTemplate(data.Name, data.ExtType)
+	}
+
 	// Create cmd files
 	cmdFiles := map[string]string{
-		"cmd/main.go":            templates.StandaloneMainTemplate(data.Name, data.ModuleName),
-		"cmd/provider/server.go": templates.StandaloneServerTemplate(data.Name, data.ModuleName),
-		"cmd/provider/gin.go":    templates.StandaloneGinTemplate(data.Name, data.ModuleName),
-		"cmd/provider/rest.go":   templates.StandaloneRestTemplate(data.Name, data.ModuleName),
+		"cmd/main.go": templates.CmdMainTemplate(data.Name, data.ExtType, data.PackagePath),
 	}
 
-	// Create files
+	// Create internal files
+	internalFiles := map[string]string{
+		"internal/server/server.go": templates.StandaloneServerTemplate(data.Name, data.ModuleName),
+		"internal/server/http.go":   templates.StandaloneGinTemplate(data.Name, data.ModuleName),
+		"internal/server/rest.go":    templates.StandaloneRestTemplate(data.Name, data.ModuleName),
+
+		"internal/middleware/cors.go":             templates.MiddlewareCORSTemplate(),
+		"internal/middleware/security_headers.go": templates.MiddlewareSecurityHeadersTemplate(),
+		"internal/middleware/trace.go":            templates.MiddlewareTraceTemplate(),
+		"internal/middleware/logger.go":           templates.MiddlewareLoggerTemplate(),
+		"internal/middleware/client_info.go":      templates.MiddlewareClientInfoTemplate(),
+
+		"internal/version/version.go": templates.VersionTemplate(),
+	}
+
+	// Create project files
 	projectFiles := map[string]string{
-		"config/config.go":   templates.StandaloneConfigTemplate(data.Name, data.ModuleName),
-		"handler/handler.go": templates.StandaloneHandlerTemplate(data.Name, data.ModuleName),
-		"model/model.go":     templates.StandaloneModelTemplate(data.Name, data.ModuleName),
-		"service/service.go": templates.StandaloneServiceTemplate(data.Name, data.ModuleName),
+		"internal/config/config.go":   templates.StandaloneConfigTemplate(data.Name, data.ModuleName),
+
+		// Handler Layer
+		"handler/provider.go": templates.StandaloneHandlerProviderTemplate(data.Name, data.ModuleName),
+		"handler/handler.go":  templates.StandaloneHandlerTemplate(data.Name, data.ModuleName),
+
+		// Service Layer
+		"service/provider.go": templates.StandaloneServiceProviderTemplate(data.Name, data.ModuleName),
+		"service/service.go":  templates.StandaloneServiceTemplate(data.Name, data.ModuleName),
+
+		// Data Layer
+		"data/data.go":        selectDataTemplate(*data),
+		"data/model/model.go": templates.StandaloneModelTemplate(data.Name, data.ModuleName),
+
+		// Repository Layer
+		"data/repository/provider.go":   templates.StandaloneRepositoryProviderTemplate(data.Name, data.ModuleName),
+		"data/repository/repository.go": templates.StandaloneRepositoryTemplate(data.Name, data.ModuleName, data.UseMongo, data.UseEnt, data.UseGorm),
 	}
 
-	// Merge the maps
+	// Merge all maps
 	files := make(map[string]string)
 	for k, v := range cmdFiles {
+		files[k] = v
+	}
+	for k, v := range internalFiles {
 		files[k] = v
 	}
 	for k, v := range projectFiles {
@@ -393,13 +480,10 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		files["tests/service_test.go"] = templates.StandaloneServiceTestTemplate(data.Name, data.ModuleName)
 	}
 
-	// Add database related files if required
-	if data.UseMongo || data.UseEnt || data.UseGorm {
-		files["repository/repository.go"] = templates.StandaloneRepositoryTemplate(data.Name, data.ModuleName, data.UseMongo, data.UseEnt, data.UseGorm)
-
-		if err := utils.EnsureDir(filepath.Join(basePath, "repository")); err != nil {
-			return fmt.Errorf("failed to create directory %s: %v", "repository", err)
-		}
+	// Add schema if Ent
+	if data.UseEnt {
+		files["data/schema/user.go"] = templates.SchemaTemplate() // Using User as example
+		files["generate.go"] = templates.GeneraterTemplate(data.Name, data.ExtType, data.ModuleName)
 	}
 
 	// Write all files
@@ -436,9 +520,30 @@ func initializeGoModule(basePath string, data *templates.Data, opts *Options) er
 go 1.24
 
 require (
-	github.com/gin-gonic/gin v1.9.0
-	github.com/spf13/cobra v1.7.0
-	github.com/google/uuid v1.3.0
+	github.com/gin-gonic/gin v1.10.0
+	github.com/spf13/cobra v1.8.1
+	github.com/google/uuid v1.6.0
+	github.com/ncobase/ncore/config v0.1.22
+	github.com/ncobase/ncore/logging v0.1.22
+	github.com/ncobase/ncore/version v0.1.22
+)
+
+replace (
+	github.com/ncobase/ncore/config => ../ncore/config
+	github.com/ncobase/ncore/logging => ../ncore/logging
+	github.com/ncobase/ncore/version => ../ncore/version
+	github.com/ncobase/ncore/data => ../ncore/data
+	github.com/ncobase/ncore/net => ../ncore/net
+	github.com/ncobase/ncore/ecode => ../ncore/ecode
+	github.com/ncobase/ncore/types => ../ncore/types
+	github.com/ncobase/ncore/utils => ../ncore/utils
+	github.com/ncobase/ncore/validation => ../ncore/validation
+	github.com/ncobase/ncore/consts => ../ncore/consts
+	github.com/ncobase/ncore/ctxutil => ../ncore/ctxutil
+	github.com/ncobase/ncore/extension => ../ncore/extension
+	github.com/ncobase/ncore/concurrency => ../ncore/concurrency
+	github.com/ncobase/ncore/messaging => ../ncore/messaging
+	github.com/ncobase/ncore/security => ../ncore/security
 )
 `, data.PackagePath)
 
@@ -446,7 +551,7 @@ require (
 	if opts.UseMongo {
 		goModContent += `
 require (
-	go.mongodb.org/mongo-driver v1.12.1
+	go.mongodb.org/mongo-driver v1.17.6
 )
 `
 	}
@@ -454,7 +559,7 @@ require (
 	if opts.UseEnt {
 		goModContent += `
 require (
-	entgo.io/ent v0.12.4
+	entgo.io/ent v0.14.1
 )
 `
 	}
@@ -462,10 +567,10 @@ require (
 	if opts.UseGorm {
 		goModContent += `
 require (
-	gorm.io/gorm v1.25.2
-	gorm.io/driver/mysql v1.5.1
-	gorm.io/driver/postgres v1.5.2
-	gorm.io/driver/sqlite v1.5.2
+	gorm.io/gorm v1.25.12
+	gorm.io/driver/mysql v1.5.7
+	gorm.io/driver/postgres v1.5.11
+	gorm.io/driver/sqlite v1.5.7
 )
 `
 	}
@@ -524,14 +629,6 @@ Thumbs.db
 			fmt.Printf("Warning: failed to create ent schema directory: %v\n", err)
 			return nil
 		}
-
-		// Initialize ent schema
-		entCmd := exec.Command("go", "run", "entgo.io/ent/cmd/ent", "init", "User")
-		entCmd.Dir = schemaDir
-		if err := entCmd.Run(); err != nil {
-			fmt.Printf("Warning: failed to initialize ent schema: %v\n", err)
-			// Just warn, don't stop the process
-		}
 	}
 
 	// Create a basic README.md
@@ -540,27 +637,96 @@ Thumbs.db
 
 ## Overview
 
-This module was generated using NCore's code generator.
+This application was generated using the Ncobase CLI (nco). It follows the standard Ncobase architecture and best practices, employing a clean architecture design with domain-driven principles.
 
-## Development
+## Project Structure
+
+### Core Directories
+
+- **cmd/**: Application entry points.
+  - **main.go**: The main entry point that initializes the application.
+- **internal/**: Private application code.
+  - **server/**: Server initialization, HTTP configuration, and extension management.
+  - **middleware/**: Application-specific HTTP middleware (CORS, Logger, Tracing, etc.).
+  - **version/**: Version information handling.
+- **config/**: Configuration management and structure definitions.
+- **handler/**: HTTP handlers (Controllers) responsible for processing requests and returning responses.
+- **service/**: Business logic layer where the core application logic resides.
+- **data/**: Data access layer.
+  - **model/**: Domain models and data entities.
+  - **repository/**: Database interaction logic (Repository pattern).
+  - **ent/**: (Optional) Entity framework generated code.
+  - **schema/**: (Optional) Database schema definitions.
+  - **migrates/**: Database migration files.
+
+### Other
+
+- **tests/**: Integration and unit tests.
+- **logs/**: Application logs (default output directory).
+
+## Getting Started
 
 ### Prerequisites
 
-- Go 1.21 or higher
+- Go 1.24 or higher
+- Git
+- (Optional) Docker for containerized database services
 
-### Building
+### Installation
+
+1. Clone the repository:
+   `+"```bash"+`
+   git clone <repository-url>
+   cd %s
+   `+"```"+`
+
+2. Install dependencies:
+   `+"```bash"+`
+   go mod tidy
+   `+"```"+`
+
+### Configuration
+
+The application uses `+"`config.yaml`"+` for configuration.
+Copy the example configuration to customize your environment:
 
 `+"```bash"+`
-go build -o %s ./cmd
+cp config.yaml config.local.yaml
 `+"```"+`
 
-### Running
+Edit `+"`config.local.yaml`"+` to set your database connection, server port, etc.
+
+### Running the Application
+
+Start the server using:
 
 `+"```bash"+`
-./%s
+go run cmd/main.go
 `+"```"+`
 
-`, data.Name, data.Name, strings.ToLower(data.Name))
+The server will start on port **8080** (by default).
+Access the health check at: `+"`http://localhost:8080/health`"+`
+
+### Testing
+
+Run all tests with:
+
+`+"```bash"+`
+go test ./...
+`+"```"+`
+
+## Development Guide
+
+1. **Define Models**: Create your data models in `+"`data/model`"+` or `+"`data/schema`"+` (if using Ent).
+2. **Repository**: Implement data access methods in `+"`data/repository`"+`.
+3. **Service**: Implement business logic in `+"`service/`"+`, calling the repository.
+4. **Handler**: Create HTTP handlers in `+"`handler/`"+` to map requests to service methods.
+5. **Router**: Register your new handlers in `+"`internal/server/rest.go`"+` or `+"`internal/server/router.go`"+`.
+
+## License
+
+[Add License Information Here]
+`, data.Name, data.Name)
 
 	if err := utils.WriteTemplateFile(readmePath, readmeContent, nil); err != nil {
 		fmt.Printf("Warning: failed to create README.md file: %v\n", err)

@@ -2,5 +2,11 @@
 .vscode/
 dist/
 build/
+bin/
 ncore
+nco
+nco-app*
+test-app/
+ncore-app/
+nco-app/
 .DS_Store

@@ -4,232 +4,234 @@ import "fmt"
 
 // CmdMainTemplate generates the main.go file for the cmd directory
 func CmdMainTemplate(name, extType, moduleName string) string {
+	// For standalone apps, packagePath is just the module name
+	// For extensions, it might be different, but here we assume standalone logic for main.go
+	// The caller should provide the correct module name / package path
+	
+	// We need the full package path to import internal/server and internal/version
+	// In the generator.go, we pass data.PackagePath which is usually what we want.
+	// But here the function signature is (name, extType, moduleName).
+	// I might need to adjust the function signature or use moduleName if it is the full path.
+	// Let's assume moduleName is the Go module name.
+	
 	return fmt.Sprintf(`package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
-	"{{ .PackagePath }}"
-	"{{ .PackagePath }}/cmd/provider"
+	"%s/internal/server"
+	"%s/internal/version"
 
+	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
-	"github.com/ncobase/ncore/version"
-
-	"github.com/spf13/cobra"
+	"github.com/ncobase/ncore/logging/observes"
 )
 
-var (
-	configFile string
+const (
+	shutdownTimeout = 3 * time.Second // service shutdown timeout
 )
 
 func main() {
+	flag.Parse()
+	// handle version flags
+	version.Flags()
+	
+	// load config
+	conf := loadConfig()
+	
+	// set logger version
 	logger.SetVersion(version.GetVersionInfo().Version)
 
-	rootCmd := &cobra.Command{
-		Use:	"%s",
-		Short: "%s service",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Initialize extension
-			cleanup, err := provider.NewExtension(configFile)
-			if err != nil {
-				return err
+	appName := strings.ToLower(conf.AppName)
+
+	// init tracer
+	initTracer(conf, appName)
+
+	// init sentry
+	initSentry(conf, appName)
+
+	// initialize logger
+	cleanupLogger := initializeLogger(conf)
+	defer cleanupLogger()
+
+	logger.Infof(context.Background(), "Starting %%s", appName)
+
+	if err := runServer(conf); err != nil {
+		logger.Fatalf(context.Background(), "Server error: %%v", err)
+	}
+}
+
+// runServer creates and runs HTTP server
+func runServer(conf *config.Config) error {
+	// create server
+	s, err := server.New(conf)
+	if err != nil {
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+	defer s.Cleanup()
+
+	// create listener
+	listener, err := createListener(conf)
+	if err != nil {
+		return fmt.Errorf("failed to create listener: %w", err)
+	}
+
+	defer func(listener net.Listener) {
+		_ = listener.Close()
+	}(listener)
+
+	// create server instance
+	srvInstance := &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", conf.Host, conf.Port),
+		Handler: s.Handler(),
+	}
+
+	// create error channel
+	errChan := make(chan error, 1)
+
+	// start server
+	go func() {
+		logger.Infof(context.Background(), "Listening and serving HTTP on: %s", srvInstance.Addr)
+		if err := srvInstance.Serve(listener); err != nil {
+			if !errors.Is(err, http.ErrServerClosed) {
+				errChan <- err
+				logger.Errorf(context.Background(), "Listen error: %s", err)
+			} else {
+				logger.Infof(context.Background(), "Server closed")
 			}
-			defer cleanup()
-			
-			// This module is already registered in registry by importing the package
-			// The registry will handle lifecycle management
-			
-			// Wait for interrupt signal
-			<-cmd.Context().Done()
-			return nil
-		},
-	}
+		}
+	}()
 
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "config.yaml", "config file path")
-
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	return gracefulShutdown(srvInstance, errChan)
 }
 
-// Import the module to register it
-var _ = %s.New
-`, name, name, name)
-}
+// createListener creates network listener
+func createListener(conf *config.Config) (net.Listener, error) {
+	addr := fmt.Sprintf("%%s:%%d", conf.Host, conf.Port)
+	if conf.Port == 0 {
+		addr = fmt.Sprintf("%%s:0", conf.Host)
+	}
 
-// CmdServerTemplate generates the server.go file for the provider directory
-func CmdServerTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package provider
-
-import (
-	"context"
-	extm "github.com/ncobase/ncore/extension/manager"
-	"github.com/ncobase/ncore/config"
-	"github.com/ncobase/ncore/logging/logger"
-	"net/http"
-)
-
-// NewServer creates a new server.
-func NewServer(conf *config.Config) (http.Handler, func(), error) {
-	// Initialize Extension Manager
-	em, err := extm.NewManager(conf)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.Fatalf(context.Background(), "Failed initializing extension manager: %%+v", err)
-		return nil, nil, err
+		// If port is in use, try to find a random available port
+		if strings.Contains(err.Error(), "address already in use") && conf.Port != 0 {
+			// Try with port 0 to let system assign a random port
+			originalPort := conf.Port
+			tmpAddr := fmt.Sprintf("%%s:0", conf.Host)
+			listener, err = net.Listen("tcp", tmpAddr)
+			if err != nil {
+				return nil, fmt.Errorf("error starting server with random port: %%w", err)
+			}
+			// Update config with the new port
+			conf.Port = listener.Addr().(*net.TCPAddr).Port
+			logger.Infof(context.Background(), "Port %%d was in use, switched to port %%d", originalPort, conf.Port)
+			return listener, nil
+		}
+		return nil, fmt.Errorf("error starting server: %%w", err)
 	}
 
-	// Register extensions
-	registerExtensions(em)
-	if err := em.LoadPlugins(); err != nil {
-		logger.Fatalf(context.Background(), "Failed loading plugins: %%+v", err)
+	// update port if dynamically allocated
+	if conf.Port == 0 {
+		conf.Port = listener.Addr().(*net.TCPAddr).Port
 	}
 
-	// New server
-	h, err := ginServer(conf, em)
+	return listener, nil
+}
+
+// loadConfig loads the application configuration
+func loadConfig() *config.Config {
+	conf, err := config.Init()
 	if err != nil {
-		logger.Fatalf(context.Background(), "Failed initializing http: %%+v", err)
+		logger.Fatalf(context.Background(), "[Config] Initialization error: %%+v", err)
 	}
-
-	return h, func() {
-		em.Cleanup()
-	}, nil
-}
-`)
+	return conf
 }
 
-// CmdExtensionTemplate generates the extension.go file for the provider directory
-func CmdExtensionTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package provider
-
-import (
-	"context"
-	"fmt"
-	
-	"github.com/ncobase/ncore/config"
-	exr "github.com/ncobase/ncore/extension/registry"
-	"github.com/ncobase/ncore/logging/logger"
-)
-
-// NewExtension initializes the extension
-func NewExtension(configFile string) (func(), error) {
-	// Initialize config
-	conf, err := config.Init(configFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize config: %%w", err)
-	}
-
-	// Initialize logger
-	cleanupLogger, err := logger.New(conf.Logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize logger: %%w", err)
-	}
-
-	// Initialize extension manager
-	em := exr.NewManager(conf)
-	
-	// Initialize all registered extensions (including this one)
-	if err := em.Init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize extensions: %%w", err)
-	}
-	
-	// Start extensions
-	if err := em.PostInit(); err != nil {
-		return nil, fmt.Errorf("failed to start extensions: %%w", err)
-	}
-
-	return func() {
-		// Cleanup extensions
-		em.Cleanup()
-		cleanupLogger()
-	}, nil
-}
-`)
-}
-
-// CmdGinTemplate generates the gin.go file for the provider directory
-func CmdGinTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package provider
-
-import (
-	ext "github.com/ncobase/ncore/extension/types"
-	"github.com/ncobase/ncore/config"
-	"github.com/ncobase/ncore/ecode"
-	"github.com/ncobase/ncore/net/resp"
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-)
-
-// ginServer creates and initializes the server.
-func ginServer(conf *config.Config, em ext.ManagerInterface) (*gin.Engine, error) {
-	// Set gin mode
-	if conf.RunMode == "" {
-		conf.RunMode = gin.ReleaseMode
-	}
-	// Set mode before creating engine
-	gin.SetMode(conf.RunMode)
-	// Create gin engine
-	engine := gin.New()
-
-	// Add middleware here if needed
-	// engine.Use(middleware.Logger)
-	// engine.Use(middleware.CORSHandler)
-
-	// Register REST
-	registerRest(engine, conf)
-
-	// Register extension / plugin routes
-	em.RegisterRoutes(engine)
-
-	// Register extension management routes
-	if conf.Extension.HotReload {
-		g := engine.Group("/sys")
-		em.ManageRoutes(g)
-	}
-
-	// No route
-	engine.NoRoute(func(c *gin.Context) {
-		resp.Fail(c.Writer, resp.NotFound(ecode.Text(http.StatusNotFound)))
-	})
-
-	return engine, nil
-}
-`)
-}
-
-// CmdRestTemplate generates the rest.go file for the provider directory
-func CmdRestTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package provider
-
-import (
-	"github.com/ncobase/ncore/helper"
-	"net/http"
-
-	"github.com/ncobase/ncore/config"
-
-	"github.com/gin-gonic/gin"
-)
-
-// registerRest registers the REST routes.
-func registerRest(e *gin.Engine, conf *config.Config) {
-	// Root endpoint
-	e.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "Service is running.")
-	})
-
-	// Health check endpoint
-	e.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"name":   conf.AppName,
-			"version": version.Version,
+// initTracer initializes the tracer
+func initTracer(conf *config.Config, appName string) {
+	if conf.Observes != nil && conf.Observes.Tracer != nil && conf.Observes.Tracer.Endpoint != "" {
+		err := observes.NewTracer(&observes.TracerOption{
+			URL:                conf.Observes.Tracer.Endpoint,
+			Name:               strings.ToLower(conf.AppName),
+			Version:            version.Version,
+			Branch:             version.Branch,
+			Revision:           version.Revision,
+			Environment:        conf.Environment,
+			SamplingRate:       1.0,
+			MaxAttributes:      100,
+			BatchTimeout:       5 * time.Second,
+			ExportTimeout:      30 * time.Second,
+			MaxExportBatchSize: 512,
 		})
-	})
-
-	// Add your API routes here
+		if err != nil {
+			logger.Errorf(context.Background(), "tracer.Init: %%s", err)
+		}
+	}
 }
-`)
+
+// initSentry initializes the sentry
+func initSentry(conf *config.Config, appName string) {
+	if conf.Observes != nil && conf.Observes.Sentry != nil && conf.Observes.Sentry.Endpoint != "" {
+		if err := observes.NewSentry(&observes.SentryOptions{
+			Dsn:         conf.Observes.Sentry.Endpoint,
+			Name:        appName,
+			Release:     version.Version,
+			Environment: conf.Environment,
+		}); err != nil {
+			logger.Errorf(context.Background(), "sentry.Init: %%s", err)
+		}
+	}
+}
+
+// initializeLogger initializes the logger
+func initializeLogger(conf *config.Config) func() {
+	l, err := logger.New(conf.Logger)
+	if err != nil {
+		logger.Fatalf(context.Background(), "[Logger] Initialization error: %%+v", err)
+	}
+	return l
+}
+
+// gracefulShutdown gracefully shuts down the server
+func gracefulShutdown(srv *http.Server, errChan chan error) error {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-errChan:
+		return fmt.Errorf("server error: %%w", err)
+
+	case <-quit:
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		// Execute shutdown logic
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Errorf(context.Background(), "Shutdown error: %%v", err)
+			return fmt.Errorf("shutdown error: %%w", err)
+		}
+
+		// wait for server to shutdown
+		<-ctx.Done()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			logger.Debugf(context.Background(), "Shutdown timed out after %%s", shutdownTimeout)
+		} else {
+			logger.Debugf(context.Background(), "Shutdown completed within %%s", shutdownTimeout)
+		}
+
+		return nil
+	}
+}
+`, moduleName, moduleName)
 }

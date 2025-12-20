@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"text/template"
 )
 
 // EnsureDir creates directory if not exists
@@ -18,7 +20,20 @@ func WriteTemplateFile(path, content string, data interface{}) error {
 	if err := EnsureDir(dir); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0644)
+
+	// Parse template
+	tmpl, err := template.New("file").Parse(content)
+	if err != nil {
+		return err
+	}
+
+	// Execute template
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
 // GetPlatformExt returns platform extension

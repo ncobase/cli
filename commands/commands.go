@@ -19,7 +19,7 @@ func NewStartCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "start",
-		Short: "Start the NCore server",
+		Short: "Start the server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("This CLI generates code projects.")
 			fmt.Println("To run servers, use generated project code.")
@@ -87,9 +87,9 @@ func NewDocsCommand() *cobra.Command {
 			var content string
 			switch format {
 			case "markdown":
-				content = "# NCore API Documentation\n\n"
+				content = "# APIs Documentation\n\n"
 			case "json":
-				content = `{"swagger": "2.0", "info": {"title": "NCore API", "version": "1.0"}}`
+				content = `{"swagger": "2.0", "info": {"title": "APIs", "version": "1.0"}}`
 			default:
 				return fmt.Errorf("unsupported format: %s", format)
 			}

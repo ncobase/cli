@@ -18,7 +18,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-	d, cleanup, err := data.New(conf, env...)
+	d, cleanup, err := data.New(conf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,7 +99,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-	d, cleanup, err := data.New(conf, env...)
+	d, cleanup, err := data.New(conf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -362,7 +362,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-    d, cleanup, err := data.New(conf, env...)
+    d, cleanup, err := data.New(conf)
     if err != nil {
         return nil, nil, err
     }
@@ -576,7 +576,7 @@ import (
     "context"
     "fmt"
     "github.com/ncobase/ncore/config"
-    "github.com/ncobase/ncore/data"
+    ndata "github.com/ncobase/ncore/data"
     "github.com/ncobase/ncore/logging/logger"
 
     "go.mongodb.org/mongo-driver/mongo"
@@ -584,14 +584,14 @@ import (
 
 // Data .
 type Data struct {
-    *data.Data
+    *ndata.Data
     MC     *mongo.Client // master mongo client
     MCRead *mongo.Client // slave mongo client for read operations
 }
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-    d, cleanup, err := data.New(conf, env...)
+    d, cleanup, err := ndata.New(conf)
     if err != nil {
         return nil, nil, err
     }
