@@ -7,7 +7,7 @@ Command-line tool for generating Ncobase projects and components.
 ### From Source
 
 ```bash
-go install github.com/ncobase/cli@latest
+go install github.com/ncobase/cli/cmd/nco@latest
 ```
 
 ### From Release

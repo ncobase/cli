@@ -19,11 +19,11 @@ help: ## Show this help message
 build: ## Build the CLI binary
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/nco
 
 install: ## Install the CLI binary to GOPATH/bin
 	@echo "Installing $(BINARY_NAME)..."
-	go install $(GOFLAGS) .
+	go install $(GOFLAGS) ./cmd/nco
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
@@ -36,15 +36,15 @@ test: ## Run tests
 
 run: ## Run the CLI locally
 	@echo "Running $(BINARY_NAME)..."
-	go run . $(ARGS)
+	go run cmd/nco/main.go $(ARGS)
 
 build-all: ## Build for multiple platforms
 	@echo "Building for multiple platforms..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
-	GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
-	GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 .
-	GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
+	GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/nco
+	GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/nco
+	GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/nco
+	GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/nco
 
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."
