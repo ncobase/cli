@@ -43,9 +43,9 @@ func newDiffCommand() *cobra.Command {
 				}
 				cArgs = append(cArgs, "--dir", dirPath, "--to", to, "--dev-url", devURL)
 			}
-			
+
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

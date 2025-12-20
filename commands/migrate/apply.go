@@ -37,12 +37,12 @@ func newApplyCommand() *cobra.Command {
 				}
 				cArgs = append(cArgs, "--dir", migrationsPath, "--url", databaseURL)
 			}
-			
+
 			// Pass dry-run if present in args (not explicitly handled but good practice to allow extra args if we wrapped generic pass-through)
 			// For now, we stick to specific flags to be safe/explicit.
-			
+
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

@@ -21,9 +21,9 @@ func newHashCommand() *cobra.Command {
 			}
 
 			args = []string{"migrate", "hash", "--dir", dirPath}
-			
+
 			fmt.Printf("Running: atlas %v\n", args)
-			
+
 			c := exec.Command("atlas", args...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

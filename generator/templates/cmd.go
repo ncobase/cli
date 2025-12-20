@@ -8,158 +8,56 @@ func CmdMainTemplate(name, extType, moduleName string) string {
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
+	"{{ .PackagePath }}"
 	"{{ .PackagePath }}/cmd/provider"
-	"github.com/ncobase/ncore/config"
-	"github.com/ncobase/ncore/helper"
+
 	"github.com/ncobase/ncore/logging/logger"
 	"github.com/ncobase/ncore/version"
+
+	"github.com/spf13/cobra"
 )
 
-const (
-	shutdownTimeout = 3 * time.Second // service shutdown timeout
+var (
+	configFile string
 )
 
 func main() {
 	logger.SetVersion(version.GetVersionInfo().Version)
-	// load config
-	conf := loadConfig()
 
-	// Application name
-	appName := conf.AppName
-
-	// Initialize logger
-	cleanupLogger := initializeLogger(conf)
-	defer cleanupLogger()
-
-	logger.Infof(context.Background(), "Starting %%s", appName)
-
-	if err := runServer(conf); err != nil {
-		logger.Fatalf(context.Background(), "Server error: %%v", err)
-	}
-}
-
-// runServer creates and runs HTTP server
-func runServer(conf *config.Config) error {
-	// create server
-	handler, cleanup, err := provider.NewServer(conf)
-	if err != nil {
-		return fmt.Errorf("failed to create server: %%w", err)
-	}
-	defer cleanup()
-
-	// create listener
-	listener, err := createListener(conf)
-	if err != nil {
-		return fmt.Errorf("failed to create listener: %%w", err)
-	}
-
-	defer func(listener net.Listener) {
-		_ = listener.Close()
-	}(listener)
-
-	// create server instance
-	srv := &http.Server{
-		Addr:    fmt.Sprintf("%%s:%%d", conf.Host, conf.Port),
-		Handler: handler,
-	}
-
-	// create error channel
-	errChan := make(chan error, 1)
-
-	// start server
-	go func() {
-		logger.Infof(context.Background(), "Listening and serving HTTP on: %%s", srv.Addr)
-		if err := srv.Serve(listener); err != nil {
-			if !errors.Is(err, http.ErrServerClosed) {
-				errChan <- err
-				logger.Errorf(context.Background(), "Listen error: %%s", err)
-			} else {
-				logger.Infof(context.Background(), "Server closed")
+	rootCmd := &cobra.Command{
+		Use:	"%s",
+		Short: "%s service",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Initialize extension
+			cleanup, err := provider.NewExtension(configFile)
+			if err != nil {
+				return err
 			}
-		}
-	}()
-
-	return gracefulShutdown(srv, errChan)
-}
-
-// createListener creates network listener
-func createListener(conf *config.Config) (net.Listener, error) {
-	addr := fmt.Sprintf("%%s:%%d", conf.Host, conf.Port)
-	if conf.Port == 0 {
-		addr = fmt.Sprintf("%%s:0", conf.Host)
+			defer cleanup()
+			
+			// This module is already registered in registry by importing the package
+			// The registry will handle lifecycle management
+			
+			// Wait for interrupt signal
+			<-cmd.Context().Done()
+			return nil
+		},
 	}
 
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("error starting server: %%w", err)
-	}
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "config.yaml", "config file path")
 
-	// update port if dynamically allocated
-	if conf.Port == 0 {
-		conf.Port = listener.Addr().(*net.TCPAddr).Port
-	}
-
-	return listener, nil
-}
-
-// loadConfig loads the application configuration
-func loadConfig() *config.Config {
-	conf, err := config.Init()
-	if err != nil {
-		logger.Fatalf(context.Background(), "[Config] Initialization error: %%+v", err)
-	}
-	return conf
-}
-
-// initializeLogger initializes the logger
-func initializeLogger(conf *config.Config) func() {
-	l, err := logger.New(conf.Logger)
-	if err != nil {
-		logger.Fatalf(context.Background(), "[Logger] Initialization error: %%+v", err)
-	}
-	return l
-}
-
-// gracefulShutdown gracefully shuts down the server
-func gracefulShutdown(srv *http.Server, errChan chan error) error {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case err := <-errChan:
-		return fmt.Errorf("server error: %%w", err)
-
-	case <-quit:
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-
-		// Execute shutdown logic
-		if err := srv.Shutdown(ctx); err != nil {
-			logger.Errorf(context.Background(), "Shutdown error: %%v", err)
-			return fmt.Errorf("shutdown error: %%w", err)
-		}
-
-		// wait for server to shutdown
-		<-ctx.Done()
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			logger.Debugf(context.Background(), "Shutdown timed out after %%s", shutdownTimeout)
-		} else {
-			logger.Debugf(context.Background(), "Shutdown completed within %%s", shutdownTimeout)
-		}
-
-		return nil
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
-`)
+
+// Import the module to register it
+var _ = %s.New
+`, name, name, name)
 }
 
 // CmdServerTemplate generates the server.go file for the provider directory
@@ -208,50 +106,47 @@ func CmdExtensionTemplate(name, extType, moduleName string) string {
 
 import (
 	"context"
-	// Import your extensions here
-	"{{ .PackagePath }}" // Import the current extension
-	ext "github.com/ncobase/ncore/extension/types"
+	"fmt"
+	
+	"github.com/ncobase/ncore/config"
+	exr "github.com/ncobase/ncore/extension/registry"
 	"github.com/ncobase/ncore/logging/logger"
-	"strings"
 )
 
-// registerExtensions registers all extensions
-func registerExtensions(em ext.ManagerInterface) {
-	// All components
-	fs := make([]ext.Interface, 0)
-
-	// Add your extensions here
-	fs = append(fs, %s.New()) // Register the current extension
-
-	// Registered extensions
-	registered := make([]ext.Interface, 0, len(fs))
-	// Get extension names
-	extensionNames := make([]string, 0, len(registered))
-
-	for _, f := range fs {
-		if err := em.Register(f); err != nil {
-			logger.Errorf(context.Background(), "Failed to register extension %%s: %%v", f.Name(), err)
-			continue // Skip this extension and try to register the next one
-		}
-		registered = append(registered, f)
-		extensionNames = append(extensionNames, f.Name())
+// NewExtension initializes the extension
+func NewExtension(configFile string) (func(), error) {
+	// Initialize config
+	conf, err := config.Init(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize config: %%w", err)
 	}
 
-	if len(registered) == 0 {
-		logger.Warnf(context.Background(), "No extensions were registered.")
-		return
+	// Initialize logger
+	cleanupLogger, err := logger.New(conf.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %%w", err)
 	}
 
-	logger.Debugf(context.Background(), "Successfully registered %%d extensions, [%%s]",
-		len(registered),
-		strings.Join(extensionNames, ", "))
-
-	if err := em.InitExtensions(); err != nil {
-		logger.Errorf(context.Background(), "Failed to initialize extensions: %%v", err)
-		return
+	// Initialize extension manager
+	em := exr.NewManager(conf)
+	
+	// Initialize all registered extensions (including this one)
+	if err := em.Init(); err != nil {
+		return nil, fmt.Errorf("failed to initialize extensions: %%w", err)
 	}
+	
+	// Start extensions
+	if err := em.PostInit(); err != nil {
+		return nil, fmt.Errorf("failed to start extensions: %%w", err)
+	}
+
+	return func() {
+		// Cleanup extensions
+		em.Cleanup()
+		cleanupLogger()
+	}, nil
 }
-`, name)
+`)
 }
 
 // CmdGinTemplate generates the gin.go file for the provider directory

@@ -70,14 +70,16 @@ func TestHandler(t *testing.T) {
 	s := service.New(nil, nil)
 	h := handler.New(s)
 
-	t.Run("health check", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/health", nil)
+	// Register routes
+	// h.RegisterRoutes(r.Group("/api/v1"))
 
-		r.GET("/health", func(c *gin.Context) {
-			// Replace with your actual health check handler
-			c.Status(http.StatusOK)
-		})
+	t.Run("list items", func(t *testing.T) {
+		// Setup route
+		r.GET("/items", h.List)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/items", nil)
+
 		r.ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
@@ -95,16 +97,28 @@ import (
 	"testing"
 	"context"
 	"{{ .PackagePath }}/service"
+	"{{ .PackagePath }}/structs"
 )
 
 func TestService(t *testing.T) {
 	ctx := context.Background()
 	s := service.New(nil, nil)
 
-	t.Run("service initialization", func(t *testing.T) {
-		// Add your service tests here
-		if s == nil {
-			t.Error("service should not be nil")
+	t.Run("create item", func(t *testing.T) {
+		req := &structs.CreateItemRequest{
+			Name: "Test Item",
+			Code: "TEST001",
+		}
+
+		resp, err := s.Create(ctx, req)
+		if err != nil {
+			t.Errorf("unexpected error: %%v", err)
+		}
+		if resp == nil {
+			t.Error("response should not be nil")
+		}
+		if resp.Name != req.Name {
+			t.Errorf("want name %%s, got %%s", req.Name, resp.Name)
 		}
 	})
 }`)

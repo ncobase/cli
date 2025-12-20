@@ -39,7 +39,7 @@ func newApplyCommand() *cobra.Command {
 					return fmt.Errorf("target schema is required (use --to)")
 				}
 				cArgs = append(cArgs, "--url", databaseURL, "--to", to)
-				
+
 				if devURL != "" {
 					cArgs = append(cArgs, "--dev-url", devURL)
 				}
@@ -53,7 +53,7 @@ func newApplyCommand() *cobra.Command {
 			}
 
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

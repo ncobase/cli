@@ -33,13 +33,13 @@ func newInspectCommand() *cobra.Command {
 				}
 				cArgs = append(cArgs, "--url", databaseURL)
 			}
-			
+
 			if format != "" {
 				cArgs = append(cArgs, "--format", format)
 			}
 
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

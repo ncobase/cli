@@ -29,7 +29,7 @@ func NewCommand() *cobra.Command {
 			opts.UseEnt, _ = cmd.Flags().GetBool("use-ent")
 			opts.UseGorm, _ = cmd.Flags().GetBool("use-gorm")
 			opts.WithTest, _ = cmd.Flags().GetBool("with-test")
-			
+
 			// Init command always generates cmd directory
 			opts.WithCmd = true
 

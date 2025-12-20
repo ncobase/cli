@@ -37,13 +37,13 @@ func newLintCommand() *cobra.Command {
 				}
 				cArgs = append(cArgs, "--dir", migrationsPath, "--dev-url", devURL)
 			}
-			
+
 			if latest > 0 {
 				cArgs = append(cArgs, "--latest", fmt.Sprintf("%d", latest))
 			}
 
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr

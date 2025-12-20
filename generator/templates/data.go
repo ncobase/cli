@@ -6,6 +6,7 @@ func DataTemplate(name, extType string) string {
 	return fmt.Sprintf(`package data
 
 import (
+	"context"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/data"
 )
@@ -17,7 +18,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-	d, cleanup, err := data.New(conf)
+	d, cleanup, err := data.New(conf, env...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,7 +99,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-	d, cleanup, err := data.New(conf)
+	d, cleanup, err := data.New(conf, env...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,7 +115,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 	// create master ent client
 	entClient, err := newEntClient(masterDB, conf.Database.Master, conf.Database.Migrate, env...)
 	if err != nil {
-		return nil, cleanup, fmt.Errorf("failed to create master ent client: %v", err)
+		return nil, cleanup, fmt.Errorf("failed to create master ent client: %%v", err)
 	}
 
 	// get read connection
@@ -123,7 +124,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 		if readDB != masterDB {
 			entClientRead, err = newEntClient(readDB, conf.Database.Master, false, env...) // slave does not support migration
 			if err != nil {
-				logger.Warnf(ctx, "Failed to create read-only ent client, will use master for reads: %v", err)
+				logger.Warnf(ctx, "Failed to create read-only ent client, will use master for reads: %%v", err)
 				entClientRead = entClient // fallback to master
 			}
 		} else {
@@ -135,29 +136,11 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 		entClientRead = entClient
 	}
 
-	// Log database configuration
-	logDatabaseConfig(ctx, d)
-
 	return &Data{
 		Data:   d,
 		EC:     entClient,
 		ECRead: entClientRead,
 	}, cleanup, nil
-}
-
-// logDatabaseConfig logs the current database configuration for debugging
-func logDatabaseConfig(ctx context.Context, d *data.Data) {
-	master, slaves, err := d.GetDatabaseNodes()
-	if err != nil {
-		logger.Warnf(ctx, "Failed to get database nodes info: %v", err)
-		return
-	}
-
-	logger.Infof(ctx, "Database configuration - Master: %v, Slaves: %d", master != nil, len(slaves))
-
-	if d.IsReadOnlyMode(ctx) {
-		logger.Warnf(ctx, "System is in read-only mode")
-	}
 }
 
 // newEntClient creates a new ent client.
@@ -166,7 +149,7 @@ func newEntClient(db *sql.DB, conf *config.DBNode, enableMigrate bool, env ...st
 		entsql.OpenDB(conf.Driver, db),
 		func(ctx context.Context, i ...any) {
 			if conf.Logging {
-				logger.Infof(ctx, "%v", i)
+				logger.Infof(ctx, "%%v", i)
 			}
 		},
 	)))
@@ -187,7 +170,7 @@ func newEntClient(db *sql.DB, conf *config.DBNode, enableMigrate bool, env ...st
 			migrateOpts = append(migrateOpts, migrate.WithDropIndex(true), migrate.WithDropColumn(true))
 		}
 		if err := client.Schema.Create(context.Background(), migrateOpts...); err != nil {
-			return nil, fmt.Errorf("failed to migrate database schema: %v", err)
+			return nil, fmt.Errorf("failed to migrate database schema: %%v", err)
 		}
 	}
 
@@ -238,13 +221,13 @@ func (d *Data) GetEntClientWithFallback(ctx context.Context, readOnly ...bool) *
 func (d *Data) Close() (errs []error) {
 	if d.EC != nil {
 		if err := d.EC.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close master ent client: %v", err))
+			errs = append(errs, fmt.Errorf("failed to close master ent client: %%v", err))
 		}
 	}
 
 	if d.ECRead != nil && d.ECRead != d.EC {
 		if err := d.ECRead.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close read ent client: %v", err))
+			errs = append(errs, fmt.Errorf("failed to close read ent client: %%v", err))
 		}
 	}
 
@@ -273,13 +256,13 @@ func (d *Data) WithEntTx(ctx context.Context, fn func(ctx context.Context, tx *e
 
 	tx, err := d.EC.Tx(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %v", err)
+		return fmt.Errorf("failed to begin transaction: %%v", err)
 	}
 
 	err = fn(context.WithValue(ctx, "entTx", tx), tx)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
+			return fmt.Errorf("tx err: %%v, rb err: %%v", err, rbErr)
 		}
 		return err
 	}
@@ -296,13 +279,13 @@ func (d *Data) WithEntTxRead(ctx context.Context, fn func(ctx context.Context, t
 
 	tx, err := client.Tx(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin read transaction: %v", err)
+		return fmt.Errorf("failed to begin read transaction: %%v", err)
 	}
 
 	err = fn(context.WithValue(ctx, "entTx", tx), tx)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
+			return fmt.Errorf("tx err: %%v, rb err: %%v", err, rbErr)
 		}
 		return err
 	}
@@ -379,7 +362,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-    d, cleanup, err := data.New(conf)
+    d, cleanup, err := data.New(conf, env...)
     if err != nil {
         return nil, nil, err
     }
@@ -402,7 +385,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 			if readDB != masterDB {
 				gormRead, err = newGormClient(readDB, conf.Database.Master)
 				if err != nil {
-					logger.Warnf(ctx, "Failed to create read-only gorm client, will use master for reads: %v", err)
+					logger.Warnf(context.Background(), "Failed to create read-only gorm client, will use master for reads: %%v", err)
 					gormRead = gormClient // fallback to master
 				}
 			} else {
@@ -608,7 +591,7 @@ type Data struct {
 
 // New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
-    d, cleanup, err := data.New(conf)
+    d, cleanup, err := data.New(conf, env...)
     if err != nil {
         return nil, nil, err
     }

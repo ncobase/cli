@@ -21,16 +21,16 @@ func newDownCommand() *cobra.Command {
 			if migrationsPath == "" {
 				migrationsPath = "file://data/ent/migrate/migrations"
 			}
-			
+
 			if databaseURL == "" {
 				return fmt.Errorf("database url is required (use -u or --url)")
 			}
 
 			// atlas migrate down --dir ... --url ...
 			cArgs := []string{"migrate", "down", "--dir", migrationsPath, "--url", databaseURL}
-			
+
 			fmt.Printf("Running: atlas %v\n", cArgs)
-			
+
 			c := exec.Command("atlas", cArgs...)
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr
