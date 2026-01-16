@@ -3,7 +3,39 @@ package templates
 import "fmt"
 
 // StandaloneMainTemplate generates the main.go file for standalone applications
-func StandaloneMainTemplate(name, moduleName string) string {
+func StandaloneMainTemplate(d *Data) string {
+	imports := ""
+	if d.DBDriver != "" && d.DBDriver != "none" {
+		imports += fmt.Sprintf("\t_ \"github.com/ncobase/ncore/data/%s\"\n", d.DBDriver)
+	}
+	if d.UseRedis {
+		imports += "\t_ \"github.com/ncobase/ncore/data/redis\"\n"
+	}
+	if d.UseElastic {
+		imports += "\t_ \"github.com/ncobase/ncore/data/elasticsearch\"\n"
+	}
+	if d.UseOpenSearch {
+		imports += "\t_ \"github.com/ncobase/ncore/data/opensearch\"\n"
+	}
+	if d.UseMeili {
+		imports += "\t_ \"github.com/ncobase/ncore/data/meilisearch\"\n"
+	}
+	if d.UseKafka {
+		imports += "\t_ \"github.com/ncobase/ncore/data/kafka\"\n"
+	}
+	if d.UseRabbitMQ {
+		imports += "\t_ \"github.com/ncobase/ncore/data/rabbitmq\"\n"
+	}
+	if d.UseS3Storage {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/s3\"\n"
+	}
+	if d.UseMinio {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/minio\"\n"
+	}
+	if d.UseAliyun {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/aliyun\"\n"
+	}
+
 	return fmt.Sprintf(`package main
 
 import (
@@ -20,7 +52,7 @@ import (
 	"{{ .PackagePath }}/internal/version"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
-)
+%s)
 
 const (
 	shutdownTimeout = 3 * time.Second // service shutdown timeout
@@ -159,7 +191,7 @@ func gracefulShutdown(srv *http.Server, errChan chan error) error {
 		return nil
 	}
 }
-`, name)
+`, imports)
 }
 
 // StandaloneServerTemplate generates the server.go file for internal/server

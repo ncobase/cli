@@ -13,33 +13,53 @@ import (
 
 // Options defines generation options
 type Options struct {
-	Name       string
-	Type       string // core / business / plugin / custom
-	CustomDir  string // Custom Directory, if Type is custom
-	OutputPath string // Generated code output path
-	ModuleName string // Module name
-	UseMongo   bool
-	UseEnt     bool
-	UseGorm    bool
-	WithCmd    bool
-	WithTest   bool
-	Standalone bool
-	Group      string
+	Name          string
+	Type          string // core / business / plugin / custom
+	CustomDir     string // Custom Directory, if Type is custom
+	OutputPath    string // Generated code output path
+	ModuleName    string // Module name
+	UseMongo      bool
+	UseEnt        bool
+	UseGorm       bool
+	WithCmd       bool
+	WithTest      bool
+	Standalone    bool
+	Group         string
+	DBDriver      string // postgres, mysql, sqlite, mongodb
+	UseRedis      bool
+	UseElastic    bool
+	UseOpenSearch bool
+	UseMeili      bool
+	UseKafka      bool
+	UseRabbitMQ   bool
+	UseS3Storage  bool
+	UseMinio      bool
+	UseAliyun     bool
 }
 
 // DefaultOptions returns default options
 func DefaultOptions() *Options {
 	return &Options{
-		Type:       "custom",
-		OutputPath: "",
-		ModuleName: "",
-		UseMongo:   false,
-		UseEnt:     false,
-		UseGorm:    false,
-		WithCmd:    false,
-		WithTest:   false,
-		Standalone: false,
-		Group:      "",
+		Type:          "custom",
+		OutputPath:    "",
+		ModuleName:    "",
+		UseMongo:      false,
+		UseEnt:        false,
+		UseGorm:       false,
+		WithCmd:       false,
+		WithTest:      false,
+		Standalone:    false,
+		Group:         "",
+		DBDriver:      "",
+		UseRedis:      false,
+		UseElastic:    false,
+		UseOpenSearch: false,
+		UseMeili:      false,
+		UseKafka:      false,
+		UseRabbitMQ:   false,
+		UseS3Storage:  false,
+		UseMinio:      false,
+		UseAliyun:     false,
 	}
 }
 
@@ -54,6 +74,13 @@ var extDescriptions = map[string]string{
 func Generate(opts *Options) error {
 	if !utils.ValidateName(opts.Name) {
 		return fmt.Errorf("invalid name: %s", opts.Name)
+	}
+
+	if opts.UseMongo && opts.DBDriver == "" {
+		opts.DBDriver = "mongodb"
+	}
+	if opts.DBDriver == "" && (opts.UseEnt || opts.UseGorm) {
+		opts.DBDriver = "all"
 	}
 
 	// Determine output path
@@ -125,19 +152,29 @@ func Generate(opts *Options) error {
 
 		// Prepare template data
 		data := &templates.Data{
-			Name:        opts.Name,
-			Type:        opts.Type,
-			UseMongo:    opts.UseMongo,
-			UseEnt:      opts.UseEnt,
-			UseGorm:     opts.UseGorm,
-			WithTest:    opts.WithTest,
-			WithCmd:     true, // Standalone always includes cmd
-			Standalone:  opts.Standalone,
-			Group:       opts.Group,
-			ExtType:     extType,
-			ModuleName:  opts.ModuleName,
-			CustomDir:   opts.CustomDir,
-			PackagePath: getPackagePath(opts),
+			Name:          opts.Name,
+			Type:          opts.Type,
+			UseMongo:      opts.UseMongo,
+			UseEnt:        opts.UseEnt,
+			UseGorm:       opts.UseGorm,
+			WithTest:      opts.WithTest,
+			WithCmd:       true, // Standalone always includes cmd
+			Standalone:    opts.Standalone,
+			Group:         opts.Group,
+			ExtType:       extType,
+			ModuleName:    opts.ModuleName,
+			CustomDir:     opts.CustomDir,
+			PackagePath:   getPackagePath(opts),
+			DBDriver:      opts.DBDriver,
+			UseRedis:      opts.UseRedis,
+			UseElastic:    opts.UseElastic,
+			UseOpenSearch: opts.UseOpenSearch,
+			UseMeili:      opts.UseMeili,
+			UseKafka:      opts.UseKafka,
+			UseRabbitMQ:   opts.UseRabbitMQ,
+			UseS3Storage:  opts.UseS3Storage,
+			UseMinio:      opts.UseMinio,
+			UseAliyun:     opts.UseAliyun,
 		}
 
 		// Create standalone structure
@@ -191,19 +228,29 @@ func Generate(opts *Options) error {
 
 	// Prepare template data
 	data := &templates.Data{
-		Name:        opts.Name,
-		Type:        opts.Type,
-		UseMongo:    opts.UseMongo,
-		UseEnt:      opts.UseEnt,
-		UseGorm:     opts.UseGorm,
-		WithTest:    opts.WithTest,
-		WithCmd:     opts.WithCmd,
-		Standalone:  opts.Standalone,
-		Group:       opts.Group,
-		ExtType:     extType,
-		ModuleName:  opts.ModuleName,
-		CustomDir:   opts.CustomDir,
-		PackagePath: getPackagePath(opts),
+		Name:          opts.Name,
+		Type:          opts.Type,
+		UseMongo:      opts.UseMongo,
+		UseEnt:        opts.UseEnt,
+		UseGorm:       opts.UseGorm,
+		WithTest:      opts.WithTest,
+		WithCmd:       opts.WithCmd,
+		Standalone:    opts.Standalone,
+		Group:         opts.Group,
+		ExtType:       extType,
+		ModuleName:    opts.ModuleName,
+		CustomDir:     opts.CustomDir,
+		PackagePath:   getPackagePath(opts),
+		DBDriver:      opts.DBDriver,
+		UseRedis:      opts.UseRedis,
+		UseElastic:    opts.UseElastic,
+		UseOpenSearch: opts.UseOpenSearch,
+		UseMeili:      opts.UseMeili,
+		UseKafka:      opts.UseKafka,
+		UseRabbitMQ:   opts.UseRabbitMQ,
+		UseS3Storage:  opts.UseS3Storage,
+		UseMinio:      opts.UseMinio,
+		UseAliyun:     opts.UseAliyun,
 	}
 
 	// Create the main extension structure
@@ -240,7 +287,7 @@ func Generate(opts *Options) error {
 
 		// Create files in cmd directory
 		files := map[string]string{
-			"cmd/main.go": templates.CmdMainTemplate(data.Name, data.ExtType, data.PackagePath),
+			"cmd/main.go": templates.CmdMainTemplate(data),
 
 			// Internal Server
 			"internal/server/server.go": templates.ServerTemplate(data.PackagePath),
@@ -423,14 +470,14 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 
 	// Create cmd files
 	cmdFiles := map[string]string{
-		"cmd/main.go": templates.CmdMainTemplate(data.Name, data.ExtType, data.PackagePath),
+		"cmd/main.go": templates.CmdMainTemplate(data),
 	}
 
 	// Create internal files
 	internalFiles := map[string]string{
 		"internal/server/server.go": templates.StandaloneServerTemplate(data.Name, data.ModuleName),
 		"internal/server/http.go":   templates.StandaloneGinTemplate(data.Name, data.ModuleName),
-		"internal/server/rest.go":    templates.StandaloneRestTemplate(data.Name, data.ModuleName),
+		"internal/server/rest.go":   templates.StandaloneRestTemplate(data.Name, data.ModuleName),
 
 		"internal/middleware/cors.go":             templates.MiddlewareCORSTemplate(),
 		"internal/middleware/security_headers.go": templates.MiddlewareSecurityHeadersTemplate(),
@@ -443,7 +490,7 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 
 	// Create project files
 	projectFiles := map[string]string{
-		"internal/config/config.go":   templates.StandaloneConfigTemplate(data.Name, data.ModuleName),
+		"internal/config/config.go": templates.StandaloneConfigTemplate(data.Name, data.ModuleName),
 
 		// Handler Layer
 		"handler/provider.go": templates.StandaloneHandlerProviderTemplate(data.Name, data.ModuleName),
@@ -517,18 +564,18 @@ func initializeGoModule(basePath string, data *templates.Data, opts *Options) er
 	// Create initial go.mod content
 	goModContent := fmt.Sprintf(`module %s
 
-go 1.24
+ go 1.24
 
-require (
+ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/spf13/cobra v1.8.1
 	github.com/google/uuid v1.6.0
-	github.com/ncobase/ncore/config v0.1.22
-	github.com/ncobase/ncore/logging v0.1.22
-	github.com/ncobase/ncore/version v0.1.22
+	github.com/ncobase/ncore/config v0.2.0
+	github.com/ncobase/ncore/logging v0.2.0
+	github.com/ncobase/ncore/version v0.2.0
 )
 
-replace (
+ replace (
 	github.com/ncobase/ncore/config => ../ncore/config
 	github.com/ncobase/ncore/logging => ../ncore/logging
 	github.com/ncobase/ncore/version => ../ncore/version
@@ -571,6 +618,166 @@ require (
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/driver/sqlite v1.5.7
+)
+`
+	}
+
+	if opts.DBDriver != "" {
+		goModContent += fmt.Sprintf(`
+require (
+	github.com/ncobase/ncore/data/%s v0.2.0
+)
+`, opts.DBDriver)
+	}
+
+	if opts.UseRedis {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/redis v0.2.0
+)
+`
+	}
+
+	if opts.UseElastic {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/elasticsearch v0.2.0
+)
+`
+	}
+
+	if opts.UseOpenSearch {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/opensearch v0.2.0
+)
+`
+	}
+
+	if opts.UseMeili {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/meilisearch v0.2.0
+)
+`
+	}
+
+	if opts.UseKafka {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/kafka v0.2.0
+)
+`
+	}
+
+	if opts.UseRabbitMQ {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/rabbitmq v0.2.0
+)
+`
+	}
+
+	if opts.UseS3Storage {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/s3 v0.2.0
+)
+`
+	}
+
+	if opts.UseMinio {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/minio v0.2.0
+)
+`
+	}
+
+	if opts.UseAliyun {
+		goModContent += `
+require (
+	github.com/ncobase/ncore/data/aliyun v0.2.0
+)
+`
+	}
+
+	if opts.DBDriver != "" {
+		goModContent += fmt.Sprintf(`
+replace (
+	github.com/ncobase/ncore/data/%s => ../ncore/data/%s
+)
+`, opts.DBDriver, opts.DBDriver)
+	}
+
+	if opts.UseRedis {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/redis => ../ncore/data/redis
+)
+`
+	}
+
+	if opts.UseElastic {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/elasticsearch => ../ncore/data/elasticsearch
+)
+`
+	}
+
+	if opts.UseOpenSearch {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/opensearch => ../ncore/data/opensearch
+)
+`
+	}
+
+	if opts.UseMeili {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/meilisearch => ../ncore/data/meilisearch
+)
+`
+	}
+
+	if opts.UseKafka {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/kafka => ../ncore/data/kafka
+)
+`
+	}
+
+	if opts.UseRabbitMQ {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/rabbitmq => ../ncore/data/rabbitmq
+)
+`
+	}
+
+	if opts.UseS3Storage {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/s3 => ../ncore/data/s3
+)
+`
+	}
+
+	if opts.UseMinio {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/minio => ../ncore/data/minio
+)
+`
+	}
+
+	if opts.UseAliyun {
+		goModContent += `
+replace (
+	github.com/ncobase/ncore/data/aliyun => ../ncore/data/aliyun
 )
 `
 	}
