@@ -3,17 +3,39 @@ package templates
 import "fmt"
 
 // CmdMainTemplate generates the main.go file for the cmd directory
-func CmdMainTemplate(name, extType, moduleName string) string {
-	// For standalone apps, packagePath is just the module name
-	// For extensions, it might be different, but here we assume standalone logic for main.go
-	// The caller should provide the correct module name / package path
-	
-	// We need the full package path to import internal/server and internal/version
-	// In the generator.go, we pass data.PackagePath which is usually what we want.
-	// But here the function signature is (name, extType, moduleName).
-	// I might need to adjust the function signature or use moduleName if it is the full path.
-	// Let's assume moduleName is the Go module name.
-	
+func CmdMainTemplate(d *Data) string {
+	imports := ""
+	if d.DBDriver != "" && d.DBDriver != "none" {
+		imports += fmt.Sprintf("\t_ \"github.com/ncobase/ncore/data/%s\"\n", d.DBDriver)
+	}
+	if d.UseRedis {
+		imports += "\t_ \"github.com/ncobase/ncore/data/redis\"\n"
+	}
+	if d.UseElastic {
+		imports += "\t_ \"github.com/ncobase/ncore/data/elasticsearch\"\n"
+	}
+	if d.UseOpenSearch {
+		imports += "\t_ \"github.com/ncobase/ncore/data/opensearch\"\n"
+	}
+	if d.UseMeili {
+		imports += "\t_ \"github.com/ncobase/ncore/data/meilisearch\"\n"
+	}
+	if d.UseKafka {
+		imports += "\t_ \"github.com/ncobase/ncore/data/kafka\"\n"
+	}
+	if d.UseRabbitMQ {
+		imports += "\t_ \"github.com/ncobase/ncore/data/rabbitmq\"\n"
+	}
+	if d.UseS3Storage {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/s3\"\n"
+	}
+	if d.UseMinio {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/minio\"\n"
+	}
+	if d.UseAliyun {
+		imports += "\t_ \"github.com/ncobase/ncore/data/storage/aliyun\"\n"
+	}
+
 	return fmt.Sprintf(`package main
 
 import (
@@ -35,7 +57,8 @@ import (
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
 	"github.com/ncobase/ncore/logging/observes"
-)
+
+%s)
 
 const (
 	shutdownTimeout = 3 * time.Second // service shutdown timeout
@@ -76,14 +99,14 @@ func runServer(conf *config.Config) error {
 	// create server
 	s, err := server.New(conf)
 	if err != nil {
-		return fmt.Errorf("failed to create server: %w", err)
+		return fmt.Errorf("failed to create server: %%w", err)
 	}
 	defer s.Cleanup()
 
 	// create listener
 	listener, err := createListener(conf)
 	if err != nil {
-		return fmt.Errorf("failed to create listener: %w", err)
+		return fmt.Errorf("failed to create listener: %%w", err)
 	}
 
 	defer func(listener net.Listener) {
@@ -92,7 +115,7 @@ func runServer(conf *config.Config) error {
 
 	// create server instance
 	srvInstance := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", conf.Host, conf.Port),
+		Addr:    fmt.Sprintf("%%s:%%d", conf.Host, conf.Port),
 		Handler: s.Handler(),
 	}
 
@@ -101,11 +124,11 @@ func runServer(conf *config.Config) error {
 
 	// start server
 	go func() {
-		logger.Infof(context.Background(), "Listening and serving HTTP on: %s", srvInstance.Addr)
+		logger.Infof(context.Background(), "Listening and serving HTTP on: %%s", srvInstance.Addr)
 		if err := srvInstance.Serve(listener); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
-				logger.Errorf(context.Background(), "Listen error: %s", err)
+				logger.Errorf(context.Background(), "Listen error: %%s", err)
 			} else {
 				logger.Infof(context.Background(), "Server closed")
 			}
@@ -233,5 +256,5 @@ func gracefulShutdown(srv *http.Server, errChan chan error) error {
 		return nil
 	}
 }
-`, moduleName, moduleName)
+`, d.PackagePath, d.PackagePath, imports)
 }

@@ -9,6 +9,36 @@ import (
 	"context"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/data"
+	{{if .DBDriver}}
+	_ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+	{{end}}
+	{{if .UseRedis}}
+	_ "github.com/ncobase/ncore/data/redis"
+	{{end}}
+	{{if .UseElastic}}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
+	{{end}}
+	{{if .UseOpenSearch}}
+	_ "github.com/ncobase/ncore/data/opensearch"
+	{{end}}
+	{{if .UseMeili}}
+	_ "github.com/ncobase/ncore/data/meilisearch"
+	{{end}}
+	{{if .UseKafka}}
+	_ "github.com/ncobase/ncore/data/kafka"
+	{{end}}
+	{{if .UseRabbitMQ}}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+	{{end}}
+	{{if .UseS3Storage}}
+	_ "github.com/ncobase/ncore/data/s3"
+	{{end}}
+	{{if .UseMinio}}
+	_ "github.com/ncobase/ncore/data/minio"
+	{{end}}
+	{{if .UseAliyun}}
+	_ "github.com/ncobase/ncore/data/aliyun"
+	{{end}}
 )
 
 // Data .
@@ -81,23 +111,44 @@ import (
 	"fmt"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/data"
+	{{if .DBDriver}}
+	_ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+	{{end}}
+	{{if .UseRedis}}
+	_ "github.com/ncobase/ncore/data/redis"
+	{{end}}
+	{{if .UseElastic}}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
+	{{end}}
+	{{if .UseOpenSearch}}
+	_ "github.com/ncobase/ncore/data/opensearch"
+	{{end}}
+	{{if .UseMeili}}
+	_ "github.com/ncobase/ncore/data/meilisearch"
+	{{end}}
+	{{if .UseKafka}}
+	_ "github.com/ncobase/ncore/data/kafka"
+	{{end}}
+	{{if .UseRabbitMQ}}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+	{{end}}
+	{{if .UseS3Storage}}
+	_ "github.com/ncobase/ncore/data/s3"
+	{{end}}
+	{{if .UseMinio}}
+	_ "github.com/ncobase/ncore/data/minio"
+	{{end}}
+	{{if .UseAliyun}}
+	_ "github.com/ncobase/ncore/data/aliyun"
+	{{end}}
 	"github.com/ncobase/ncore/logging/logger"
-  "{{ .PackagePath }}/data/ent"
-  "{{ .PackagePath }}/data/ent/migrate"
+	"{{ .PackagePath }}/data/ent"
+	"{{ .PackagePath }}/data/ent/migrate"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/schema"
 )
-
-// Data .
-type Data struct {
-	*data.Data
-	EC     *ent.Client // master ent client
-	ECRead *ent.Client // slave ent client for read operations
-}
-
-// New creates a new Database Connection.
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
 	d, cleanup, err := data.New(conf)
 	if err != nil {
@@ -344,6 +395,81 @@ import (
     "fmt"
     "github.com/ncobase/ncore/config"
     "github.com/ncobase/ncore/data"
+    {{if .DBDriver}}
+    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+    {{end}}
+    {{if .UseRedis}}
+    _ "github.com/ncobase/ncore/data/redis"
+    {{end}}
+    {{if .UseElastic}}
+    _ "github.com/ncobase/ncore/data/elasticsearch"
+    {{end}}
+    {{if .UseOpenSearch}}
+    _ "github.com/ncobase/ncore/data/opensearch"
+    {{end}}
+    {{if .UseMeili}}
+    _ "github.com/ncobase/ncore/data/meilisearch"
+    {{end}}
+    {{if .UseKafka}}
+    _ "github.com/ncobase/ncore/data/kafka"
+    {{end}}
+    {{if .UseRabbitMQ}}
+    _ "github.com/ncobase/ncore/data/rabbitmq"
+    {{end}}
+    {{if .UseS3Storage}}
+    _ "github.com/ncobase/ncore/data/s3"
+    {{end}}
+    {{if .UseMinio}}
+    _ "github.com/ncobase/ncore/data/minio"
+    {{end}}
+    {{if .UseAliyun}}
+    _ "github.com/ncobase/ncore/data/aliyun"
+    {{end}}
+    "github.com/ncobase/ncore/logging/logger"
+
+    "gorm.io/driver/mysql"
+    "gorm.io/driver/postgres"
+    "gorm.io/driver/sqlite"
+    "gorm.io/gorm"
+    "gorm.io/gorm/logger"
+)
+
+import (
+    "context"
+    "database/sql"
+    "fmt"
+    "github.com/ncobase/ncore/config"
+    "github.com/ncobase/ncore/data"
+    {{if .DBDriver}}
+    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+    {{end}}
+    {{if .UseRedis}}
+    _ "github.com/ncobase/ncore/data/redis"
+    {{end}}
+    {{if .UseElastic}}
+    _ "github.com/ncobase/ncore/data/elasticsearch"
+    {{end}}
+    {{if .UseOpenSearch}}
+    _ "github.com/ncobase/ncore/data/opensearch"
+    {{end}}
+    {{if .UseMeili}}
+    _ "github.com/ncobase/ncore/data/meilisearch"
+    {{end}}
+    {{if .UseKafka}}
+    _ "github.com/ncobase/ncore/data/kafka"
+    {{end}}
+    {{if .UseRabbitMQ}}
+    _ "github.com/ncobase/ncore/data/rabbitmq"
+    {{end}}
+    {{if .UseS3Storage}}
+    _ "github.com/ncobase/ncore/data/s3"
+    {{end}}
+    {{if .UseMinio}}
+    _ "github.com/ncobase/ncore/data/minio"
+    {{end}}
+    {{if .UseAliyun}}
+    _ "github.com/ncobase/ncore/data/aliyun"
+    {{end}}
     "github.com/ncobase/ncore/logging/logger"
 
     "gorm.io/driver/mysql"
@@ -577,6 +703,76 @@ import (
     "fmt"
     "github.com/ncobase/ncore/config"
     ndata "github.com/ncobase/ncore/data"
+    {{if .DBDriver}}
+    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+    {{end}}
+    {{if .UseRedis}}
+    _ "github.com/ncobase/ncore/data/redis"
+    {{end}}
+    {{if .UseElastic}}
+    _ "github.com/ncobase/ncore/data/elasticsearch"
+    {{end}}
+    {{if .UseOpenSearch}}
+    _ "github.com/ncobase/ncore/data/opensearch"
+    {{end}}
+    {{if .UseMeili}}
+    _ "github.com/ncobase/ncore/data/meilisearch"
+    {{end}}
+    {{if .UseKafka}}
+    _ "github.com/ncobase/ncore/data/kafka"
+    {{end}}
+    {{if .UseRabbitMQ}}
+    _ "github.com/ncobase/ncore/data/rabbitmq"
+    {{end}}
+    {{if .UseS3Storage}}
+    _ "github.com/ncobase/ncore/data/s3"
+    {{end}}
+    {{if .UseMinio}}
+    _ "github.com/ncobase/ncore/data/minio"
+    {{end}}
+    {{if .UseAliyun}}
+    _ "github.com/ncobase/ncore/data/aliyun"
+    {{end}}
+    "github.com/ncobase/ncore/logging/logger"
+
+    "go.mongodb.org/mongo-driver/mongo"
+)
+
+import (
+    "context"
+    "fmt"
+    "github.com/ncobase/ncore/config"
+    ndata "github.com/ncobase/ncore/data"
+    {{if .DBDriver}}
+    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+    {{end}}
+    {{if .UseRedis}}
+    _ "github.com/ncobase/ncore/data/redis"
+    {{end}}
+    {{if .UseElastic}}
+    _ "github.com/ncobase/ncore/data/elasticsearch"
+    {{end}}
+    {{if .UseOpenSearch}}
+    _ "github.com/ncobase/ncore/data/opensearch"
+    {{end}}
+    {{if .UseMeili}}
+    _ "github.com/ncobase/ncore/data/meilisearch"
+    {{end}}
+    {{if .UseKafka}}
+    _ "github.com/ncobase/ncore/data/kafka"
+    {{end}}
+    {{if .UseRabbitMQ}}
+    _ "github.com/ncobase/ncore/data/rabbitmq"
+    {{end}}
+    {{if .UseS3Storage}}
+    _ "github.com/ncobase/ncore/data/s3"
+    {{end}}
+    {{if .UseMinio}}
+    _ "github.com/ncobase/ncore/data/minio"
+    {{end}}
+    {{if .UseAliyun}}
+    _ "github.com/ncobase/ncore/data/aliyun"
+    {{end}}
     "github.com/ncobase/ncore/logging/logger"
 
     "go.mongodb.org/mongo-driver/mongo"
