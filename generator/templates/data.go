@@ -30,15 +30,6 @@ import (
 	{{if .UseRabbitMQ}}
 	_ "github.com/ncobase/ncore/data/rabbitmq"
 	{{end}}
-	{{if .UseS3Storage}}
-	_ "github.com/ncobase/ncore/data/s3"
-	{{end}}
-	{{if .UseMinio}}
-	_ "github.com/ncobase/ncore/data/minio"
-	{{end}}
-	{{if .UseAliyun}}
-	_ "github.com/ncobase/ncore/data/aliyun"
-	{{end}}
 )
 
 // Data .
@@ -129,19 +120,11 @@ import (
 	{{if .UseKafka}}
 	_ "github.com/ncobase/ncore/data/kafka"
 	{{end}}
-	{{if .UseRabbitMQ}}
-	_ "github.com/ncobase/ncore/data/rabbitmq"
-	{{end}}
-	{{if .UseS3Storage}}
-	_ "github.com/ncobase/ncore/data/s3"
-	{{end}}
-	{{if .UseMinio}}
-	_ "github.com/ncobase/ncore/data/minio"
-	{{end}}
-	{{if .UseAliyun}}
-	_ "github.com/ncobase/ncore/data/aliyun"
-	{{end}}
-	"github.com/ncobase/ncore/logging/logger"
+    {{if .UseRabbitMQ}}
+    _ "github.com/ncobase/ncore/data/rabbitmq"
+    {{end}}
+    "github.com/ncobase/ncore/logging/logger"
+	"github.com/ncobase/ncore/data/search"
 	"{{ .PackagePath }}/data/ent"
 	"{{ .PackagePath }}/data/ent/migrate"
 
@@ -149,6 +132,15 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/schema"
 )
+
+// Data .
+type Data struct {
+	SearchClient *search.Client
+	*data.Data
+	EC     *ent.Client // master ent client
+	ECRead *ent.Client // slave ent client for read operations
+}
+
 func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
 	d, cleanup, err := data.New(conf)
 	if err != nil {
@@ -187,7 +179,10 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 		entClientRead = entClient
 	}
 
+	searchClient := search.NewClientFromData(d)
+
 	return &Data{
+		SearchClient: searchClient,
 		Data:   d,
 		EC:     entClient,
 		ECRead: entClientRead,
@@ -344,6 +339,41 @@ func (d *Data) WithEntTxRead(ctx context.Context, fn func(ctx context.Context, t
 	return tx.Commit()
 }
 
+// Search methods adapter
+
+func (d *Data) IndexDocument(ctx context.Context, req *search.IndexRequest) error {
+	if d.SearchClient == nil {
+		return nil
+	}
+	return d.SearchClient.Index(ctx, req)
+}
+
+func (d *Data) DeleteDocument(ctx context.Context, index, id string) error {
+	if d.SearchClient == nil {
+		return nil
+	}
+	return d.SearchClient.Delete(ctx, index, id)
+}
+
+func (d *Data) Search(ctx context.Context, req *search.Request) (*search.Response, error) {
+	if d.SearchClient == nil {
+		return nil, fmt.Errorf("search client not initialized")
+	}
+	return d.SearchClient.Search(ctx, req)
+}
+
+func (d *Data) GetAvailableSearchEngines() []string {
+	if d.SearchClient == nil {
+		return []string{}
+	}
+	engines := d.SearchClient.GetAvailableEngines()
+	res := make([]string, len(engines))
+	for i, e := range engines {
+		res[i] = string(e)
+	}
+	return res
+}
+
 
 
 /* Example usage:
@@ -471,6 +501,7 @@ import (
     _ "github.com/ncobase/ncore/data/aliyun"
     {{end}}
     "github.com/ncobase/ncore/logging/logger"
+    "github.com/ncobase/ncore/data/search"
 
     "gorm.io/driver/mysql"
     "gorm.io/driver/postgres"
@@ -481,6 +512,7 @@ import (
 
 // Data .
 type Data struct {
+    SearchClient *search.Client
     *data.Data
     GormClient *gorm.DB    // master gorm client
     GormRead   *gorm.DB    // slave gorm client for read operations
@@ -523,7 +555,10 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 			gormRead = gormClient
 		}
 
+    searchClient := search.NewClientFromData(d)
+
     return &Data{
+        SearchClient: searchClient,
         Data:       d,
         GormClient: gormClient,
         GormRead:   gormRead,

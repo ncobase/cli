@@ -26,15 +26,6 @@ func StandaloneMainTemplate(d *Data) string {
 	if d.UseRabbitMQ {
 		imports += "\t_ \"github.com/ncobase/ncore/data/rabbitmq\"\n"
 	}
-	if d.UseS3Storage {
-		imports += "\t_ \"github.com/ncobase/ncore/data/storage/s3\"\n"
-	}
-	if d.UseMinio {
-		imports += "\t_ \"github.com/ncobase/ncore/data/storage/minio\"\n"
-	}
-	if d.UseAliyun {
-		imports += "\t_ \"github.com/ncobase/ncore/data/storage/aliyun\"\n"
-	}
 
 	return fmt.Sprintf(`package main
 
