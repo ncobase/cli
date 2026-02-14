@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/ncobase/ncore/consts"
 	"github.com/ncobase/ncore/ctxutil"
@@ -88,56 +87,3 @@ func setClientInfoToContext(ctx context.Context, c *gin.Context) context.Context
 	return ctx
 }
 
-// extractClientIP extracts real client IP from various headers
-func extractClientIP(c *gin.Context) string {
-	// Priority order for IP extraction
-	headers := []string{
-		"X-Forwarded-For",
-		"X-Real-IP",
-		"CF-Connecting-IP",
-		"X-Client-IP",
-		"X-Cluster-Client-IP",
-	}
-
-	for _, header := range headers {
-		ip := c.GetHeader(header)
-		if ip != "" && ip != "unknown" {
-			// Handle X-Forwarded-For which may contain multiple IPs
-			if header == "X-Forwarded-For" {
-				ips := strings.Split(ip, ",")
-				if len(ips) > 0 {
-					cleanIP := strings.TrimSpace(ips[0])
-					if cleanIP != "" && cleanIP != "unknown" {
-						return cleanIP
-					}
-				}
-			} else {
-				return ip
-			}
-		}
-	}
-
-	// Fallback to Gin's ClientIP method
-	return c.ClientIP()
-}
-
-// extractSessionID extracts session ID from various sources
-func extractSessionID(c *gin.Context) string {
-	// Try session cookie
-	sessionCookieNames := []string{"session_id", "sessionid", "SESSIONID"}
-	for _, cookieName := range sessionCookieNames {
-		if sessionID, err := c.Cookie(cookieName); err == nil && sessionID != "" {
-			return sessionID
-		}
-	}
-
-	// Try session headers
-	sessionHeaders := []string{"X-Session-ID", "X-Session-Id", "Session-ID"}
-	for _, headerName := range sessionHeaders {
-		if sessionID := c.GetHeader(headerName); sessionID != "" {
-			return sessionID
-		}
-	}
-
-	return ""
-}

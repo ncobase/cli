@@ -477,7 +477,6 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		"data/model",
 		"data/repository",
 		"service",
-		"configs",
 	}
 
 	if data.UseEnt {
@@ -532,7 +531,7 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 	}
 
 	if content, err := registry.RenderConfigYaml(tmplData); err == nil {
-		files["configs/config.example.yaml"] = content
+		files["config.yaml"] = content
 	} else {
 		return fmt.Errorf("failed to render config.yaml: %w", err)
 	}
@@ -644,6 +643,12 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		files["internal/middleware/client_info.go"] = content
 	} else {
 		return fmt.Errorf("failed to render Client Info middleware: %w", err)
+	}
+
+	if content, err := registry.RenderMiddlewareUtils(tmplData); err == nil {
+		files["internal/middleware/utils.go"] = content
+	} else {
+		return fmt.Errorf("failed to render middleware utils: %w", err)
 	}
 
 	// Add test files if required
@@ -904,13 +909,11 @@ This application was generated using the Ncobase CLI. It follows the standard Nc
 ### Configuration
 
 The application uses `+"`config.yaml`"+` for configuration.
-Copy the example configuration to customize your environment:
+Edit the configuration file to set your database connection, server port, etc.
 
 `+"```bash"+`
-cp config.yaml config.local.yaml
+vim config.yaml
 `+"```"+`
-
-Edit `+"`config.local.yaml`"+` to set your database connection, server port, etc.
 
 ### Running the Application
 
@@ -949,54 +952,6 @@ go test ./...
 		// Just warn, don't stop the process
 	}
 
-	// Create sample config.yaml file
-	configPath := filepath.Join(basePath, "config.yaml")
-	configContent := fmt.Sprintf(`# Application configuration
-app_name: %s
-environment: debug  # debug, release
-
-# Server configuration
-server:
-  protocol: http
-  domain: localhost
-  host: 127.0.0.1
-  port: 8080
-
-# Data sources configuration
-data:
-  # Environment, support development / staging / production
-  environment:
-  database:
-    master:
-      driver: sqlite3  # postgres, mysql, sqlite3
-      source: ./data.db
-      maxOpenConns: 10
-      maxIdleConns: 5
-      connMaxLifetime: 3600 # seconds
-      logging: true
-  redis:
-    addr: 127.0.0.1:6378
-    password:
-    read_timeout: 0.4s
-    write_timeout: 0.6s
-    dial_timeout: 1s
-
-# Logger configuration
-logger:
-  # Log level (1:fatal, 2:error, 3:warn, 4:info, 5:debug)
-  level: 4
-  # Log format (supported output formats: text/json)
-  format: text
-  # Log output (supported: stdout/stderr/file)
-  output: stdout
-  # Specify the file path for log output
-  output_file: logs/access.log
-`, data.Name)
-
-	if err := utils.WriteTemplateFile(configPath, configContent, nil); err != nil {
-		fmt.Printf("Warning: failed to create config.yaml file: %v\n", err)
-		// Just warn, don't stop the process
-	}
 
 	// Create Makefile for build support
 	makefilePath := filepath.Join(basePath, "Makefile")

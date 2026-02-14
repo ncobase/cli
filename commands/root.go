@@ -15,11 +15,13 @@ func NewRootCmd() *cobra.Command {
 		Short: "Ncobase CLI - Scaffold Go applications with ncore framework",
 		Long: `Ncobase CLI - A powerful scaffolding tool for the ncore framework
 
-Commands:
+Core Commands:
   init     Initialize a new standalone application
   create   Create extensions within an existing project (core/business/plugin)
-  migrate  Run database migrations
-  schema   Generate database schemas
+
+Database Utilities (Optional):
+  migrate  Run database migrations (requires Atlas)
+  schema   Inspect and manage database schemas (requires Atlas)
 
 Use "nco [command] --help" for more information about a command.`,
 	}

@@ -191,6 +191,11 @@ func (r *Registry) RenderMiddlewareClientInfo(data *TemplateData) (string, error
 	return r.loader.Render("middleware/client_info.go", data)
 }
 
+// RenderMiddlewareUtils renders the middleware utilities template
+func (r *Registry) RenderMiddlewareUtils(data *TemplateData) (string, error) {
+	return r.loader.Render("middleware/utils.go", data)
+}
+
 // NewTemplateData creates template data from templates.Data
 func NewTemplateData(d *templates.Data) *TemplateData {
 	return &TemplateData{
