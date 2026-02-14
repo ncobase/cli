@@ -104,7 +104,7 @@ nco init analytics --db mongodb --use-mongo --use-elastic
 
 ### `nco create` - Create Extensions
 
-Add modules to existing projects.
+Add modules to existing projects. Extensions follow the same clean architecture pattern as standalone apps.
 
 ```bash
 nco create [type] <name> [flags]
@@ -112,14 +112,60 @@ nco create [type] <name> [flags]
 
 **Extension Types:**
 
-| Type       | Purpose               | Example                     |
-| ---------- | --------------------- | --------------------------- |
-| `core`     | Fundamental logic     | `nco create core auth`      |
-| `business` | App-specific features | `nco create business order` |
-| `plugin`   | Optional features     | `nco create plugin payment` |
-| Custom     | Your directory        | `nco create myext user`     |
+| Type       | Purpose                       | Path              | Example                     |
+| ---------- | ----------------------------- | ----------------- | --------------------------- |
+| `core`     | Fundamental business logic    | `core/<name>`     | `nco create core auth`      |
+| `business` | Application-specific features | `business/<name>` | `nco create business order` |
+| `plugin`   | Optional/pluggable features   | `plugin/<name>`   | `nco create plugin payment` |
+| Custom     | Custom directory name         | `<dir>/<name>`    | `nco create myext user`     |
 
-**Flags:** `--use-ent`, `--use-gorm`, `--use-mongo`, `--with-test`, `--with-cmd`
+**Flags:**
+
+| Flag           | Description                              | Default |
+| -------------- | ---------------------------------------- | ------- |
+| `--use-ent`    | Use Ent ORM (for SQL databases)          | false   |
+| `--use-gorm`   | Use GORM (for SQL databases)             | false   |
+| `--use-mongo`  | Use MongoDB driver                       | false   |
+| `--with-test`  | Generate test files                      | false   |
+| `--with-cmd`   | Generate cmd/main.go for standalone run  | false   |
+| `-p, --path`   | Output path (default: current directory) | `.`     |
+| `-m, --module` | Go module name                           | auto    |
+| `--group`      | Optional domain group name               | -       |
+
+**Generated Structure (per extension):**
+
+```text
+<type>/<name>/
+├── handler/             # HTTP handlers
+│   ├── provider.go
+│   └── <name>.go
+├── service/             # Business logic
+│   ├── provider.go
+│   └── <name>.go
+├── data/                # Data access
+│   ├── model/
+│   ├── repository/
+│   └── schema/          # If --use-ent
+└── tests/               # If --with-test
+```
+
+**Examples:**
+
+```bash
+# Core authentication module with Ent
+nco create core auth --use-ent --with-test
+
+# Business CRM module with GORM
+nco create business crm --use-gorm --with-cmd
+
+# Payment plugin with MongoDB
+nco create plugin payment --use-mongo
+
+# Custom extension in 'features' directory
+nco create features notification --use-ent
+```
+
+**Note:** Extensions integrate seamlessly with existing ncobase projects and can be developed/tested independently with `--with-cmd`.
 
 ### Other Commands
 
@@ -154,38 +200,92 @@ myapp/
 
 ## Configuration
 
-Generated `config.yaml`:
+Generated `config.yaml` (located in project root):
 
 ```yaml
+# Application name
 app_name: myapp
-environment: debug # debug, release
+# Running environment: production / development / debug
+environment: debug
 
 server:
+  # Protocol type: http / https
+  protocol: http
+  # Running domain
+  domain: localhost
+  # Application running address
   host: 127.0.0.1
+  # Application running port
   port: 8080
 
 data:
   database:
+    # Global configuration
+    migrate: true # Auto-run migrations
+    strategy: random # Load balancing: round_robin / random
+    max_retry: 3 # Connection retry attempts
+    # Master configuration
     master:
       driver: postgres
-      source: postgres://user:pass@localhost/db?sslmode=disable
-      maxOpenConns: 10
-      maxIdleConns: 5
-      logging: true
+      source: postgres://postgres:postgres@localhost:5432/myapp?sslmode=disable
+      max_open_conn: 32
+      max_life_time: 7200
+      max_idle_conn: 8
+      logging: false
     # Optional slaves for read replicas
-    slaves: []
+    # slaves:
+    #   - driver: postgres
+    #     source: postgres://postgres:postgres@localhost:5433/myapp?sslmode=disable
+    #     max_open_conn: 64
+    #     max_idle_conn: 16
+    #     width: 1  # Load balancing weight
 
-  # Optional data sources (if enabled via flags)
+  # Optional data sources (generated based on flags)
   redis:
     addr: localhost:6379
+    password: ""
+    db: 0
+    read_timeout: 0.4s
+    write_timeout: 0.6s
+    dial_timeout: 1s
 
-  elasticsearch:
-    addresses: ["http://localhost:9200"]
+  search:
+    elasticsearch:
+      addresses:
+        - http://localhost:9200
+      username: ""
+      password: ""
+
+  kafka:
+    brokers:
+      - localhost:9092
+    sasl:
+      enable: false
+
+auth:
+  jwt:
+    secret: "change-this-secret-in-production"
+    expire: 48 # Expiration time in hours
+  whitelist:
+    - /health
+    - /login
+    - "*swagger*"
 
 logger:
-  level: 4 # 1:fatal, 2:error, 3:warn, 4:info, 5:debug
-  format: text # text, json
+  level: 5 # 1:fatal, 2:error, 3:warn, 4:info, 5:debug
+  format: text # text / json
+  output: stdout # stdout / stderr / file
+  output_file: ./logs/runtime.log
+
+storage:
+  provider: minio # filesystem / minio / aliyun-oss / aws-s3
+  id: minioadmin
+  secret: minioadmin
+  bucket: myapp
+  endpoint: http://localhost:9000
 ```
+
+**Note**: Configuration structure follows [ncore](https://github.com/ncobase/ncore) framework standards. All field names and values are production-ready.
 
 ## Makefile Commands
 
@@ -271,6 +371,33 @@ nco init chat \
   --use-ent \
   --use-redis \
   --use-rabbitmq
+```
+
+### Modular Application (with Extensions)
+
+```bash
+# 1. Initialize base application
+nco init myapp --db postgres --use-ent --use-redis
+
+cd myapp
+
+# 2. Add core authentication module
+nco create core auth --use-ent --with-test
+
+# 3. Add business modules
+nco create business order --use-ent --with-test
+nco create business inventory --use-ent
+
+# 4. Add optional plugins
+nco create plugin notification --use-ent
+nco create plugin analytics --use-mongo
+
+# Project structure:
+# myapp/
+# ├── core/auth/           # Authentication module
+# ├── business/order/      # Order management
+# ├── business/inventory/  # Inventory tracking
+# └── plugin/notification/ # Notification system
 ```
 
 ## Database Support Matrix
@@ -690,21 +817,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Links
 
 - [Ncore Framework](https://github.com/ncobase/ncore)
-- [Documentation](https://github.com/ncobase/ncobase)
-- [Issues](https://github.com/ncobase/cli/issues)
-
-## Acknowledgments
-
-Thanks to all contributors to the Ncobase project.
-
-Special thanks to:
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Links
-
-- [Ncore Framework](https://github.com/ncobase/ncore)
-- [Documentation](https://github.com/ncobase/ncobase)
 - [Issues](https://github.com/ncobase/cli/issues)
 
 ## Acknowledgments

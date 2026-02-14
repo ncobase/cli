@@ -104,7 +104,7 @@ nco init analytics --db mongodb --use-mongo --use-elastic
 
 ### `nco create` - 创建扩展
 
-向现有项目添加模块。
+在现有的项目中添加模块。扩展遵循与独立应用相同的清晰架构模式。
 
 ```bash
 nco create [类型] <名称> [标志]
@@ -112,14 +112,60 @@ nco create [类型] <名称> [标志]
 
 **扩展类型：**
 
-| 类型       | 用途       | 示例                        |
-| ---------- | ---------- | --------------------------- |
-| `core`     | 核心逻辑   | `nco create core auth`      |
-| `business` | 业务功能   | `nco create business order` |
-| `plugin`   | 可选功能   | `nco create plugin payment` |
-| 自定义     | 自定义目录 | `nco create myext user`     |
+| 类型       | 用途            | 路径              | 示例                        |
+| ---------- | --------------- | ----------------- | --------------------------- |
+| `core`     | 基础业务逻辑    | `core/<name>`     | `nco create core auth`      |
+| `business` | 应用特定功能    | `business/<name>` | `nco create business order` |
+| `plugin`   | 可选/插件化功能 | `plugin/<name>`   | `nco create plugin payment` |
+| 自定义     | 自定义目录名称  | `<dir>/<name>`    | `nco create myext user`     |
 
-**标志：** `--use-ent`、`--use-gorm`、`--use-mongo`、`--with-test`、`--with-cmd`
+**标志：**
+
+| 标志           | 说明                          | 默认值 |
+| -------------- | ----------------------------- | ------ |
+| `--use-ent`    | 使用 Ent ORM（SQL 数据库）    | false  |
+| `--use-gorm`   | 使用 GORM（SQL 数据库）       | false  |
+| `--use-mongo`  | 使用 MongoDB 驱动             | false  |
+| `--with-test`  | 生成测试文件                  | false  |
+| `--with-cmd`   | 生成 cmd/main.go 用于独立运行 | false  |
+| `-p, --path`   | 输出路径（默认：当前目录）    | `.`    |
+| `-m, --module` | Go 模块名称                   | auto   |
+| `--group`      | 可选的域组名称                | -      |
+
+**生成的结构（每个扩展）：**
+
+```text
+<type>/<name>/
+├── handler/             # HTTP 处理器
+│   ├── provider.go
+│   └── <name>.go
+├── service/             # 业务逻辑
+│   ├── provider.go
+│   └── <name>.go
+├── data/                # 数据访问
+│   ├── model/
+│   ├── repository/
+│   └── schema/          # 如果使用 --use-ent
+└── tests/               # 如果使用 --with-test
+```
+
+**示例：**
+
+```bash
+# 使用 Ent 的核心认证模块
+nco create core auth --use-ent --with-test
+
+# 使用 GORM 的业务 CRM 模块
+nco create business crm --use-gorm --with-cmd
+
+# 使用 MongoDB 的支付插件
+nco create plugin payment --use-mongo
+
+# 在 'features' 目录中的自定义扩展
+nco create features notification --use-ent
+```
+
+**注意：** 扩展可以无缝集成到现有的 ncobase 项目中，并可以使用 `--with-cmd` 独立开发/测试。
 
 ### 其他命令
 
@@ -154,38 +200,92 @@ myapp/
 
 ## 配置
 
-生成的 `config.yaml`：
+生成的 `config.yaml`（位于项目根目录）：
 
 ```yaml
+# 应用名称
 app_name: myapp
-environment: debug # debug, release
+# 运行环境：production / development / debug
+environment: debug
 
 server:
+  # 协议类型：http / https
+  protocol: http
+  # 运行域名
+  domain: localhost
+  # 应用运行地址
   host: 127.0.0.1
+  # 应用运行端口
   port: 8080
 
 data:
   database:
+    # 全局配置
+    migrate: true # 自动运行迁移
+    strategy: random # 负载均衡策略：round_robin / random
+    max_retry: 3 # 连接重试次数
+    # 主库配置
     master:
       driver: postgres
-      source: postgres://user:pass@localhost/db?sslmode=disable
-      maxOpenConns: 10
-      maxIdleConns: 5
-      logging: true
+      source: postgres://postgres:postgres@localhost:5432/myapp?sslmode=disable
+      max_open_conn: 32
+      max_life_time: 7200
+      max_idle_conn: 8
+      logging: false
     # 可选的从库配置（读副本）
-    slaves: []
+    # slaves:
+    #   - driver: postgres
+    #     source: postgres://postgres:postgres@localhost:5433/myapp?sslmode=disable
+    #     max_open_conn: 64
+    #     max_idle_conn: 16
+    #     width: 1  # 负载均衡权重
 
-  # 可选的数据源（通过标志启用）
+  # 可选的数据源（根据标志生成）
   redis:
     addr: localhost:6379
+    password: ""
+    db: 0
+    read_timeout: 0.4s
+    write_timeout: 0.6s
+    dial_timeout: 1s
 
-  elasticsearch:
-    addresses: ["http://localhost:9200"]
+  search:
+    elasticsearch:
+      addresses:
+        - http://localhost:9200
+      username: ""
+      password: ""
+
+  kafka:
+    brokers:
+      - localhost:9092
+    sasl:
+      enable: false
+
+auth:
+  jwt:
+    secret: "生产环境请修改此密钥"
+    expire: 48 # 过期时间（小时）
+  whitelist:
+    - /health
+    - /login
+    - "*swagger*"
 
 logger:
-  level: 4 # 1:fatal, 2:error, 3:warn, 4:info, 5:debug
-  format: text # text, json
+  level: 5 # 1:fatal, 2:error, 3:warn, 4:info, 5:debug
+  format: text # text / json
+  output: stdout # stdout / stderr / file
+  output_file: ./logs/runtime.log
+
+storage:
+  provider: minio # filesystem / minio / aliyun-oss / aws-s3
+  id: minioadmin
+  secret: minioadmin
+  bucket: myapp
+  endpoint: http://localhost:9000
 ```
+
+**注意**：配置结构遵循 [ncore](https://github.com/ncobase/ncore) 框架标准。所有字段名称和值都是生产就绪的。
 
 ## Makefile 命令
 
@@ -271,6 +371,33 @@ nco init chat \
   --use-ent \
   --use-redis \
   --use-rabbitmq
+```
+
+### 模块化应用（使用扩展）
+
+```bash
+# 1. 初始化基础应用
+nco init myapp --db postgres --use-ent --use-redis
+
+cd myapp
+
+# 2. 添加核心认证模块
+nco create core auth --use-ent --with-test
+
+# 3. 添加业务模块
+nco create business order --use-ent --with-test
+nco create business inventory --use-ent
+
+# 4. 添加可选插件
+nco create plugin notification --use-ent
+nco create plugin analytics --use-mongo
+
+# 项目结构：
+# myapp/
+# ├── core/auth/           # 认证模块
+# ├── business/order/      # 订单管理
+# ├── business/inventory/  # 库存跟踪
+# └── plugin/notification/ # 通知系统
 ```
 
 ## 数据库支持矩阵
@@ -690,14 +817,7 @@ MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
 ## 链接
 
 - [Ncore 框架](https://github.com/ncobase/ncore)
-- [文档](https://github.com/ncobase/ncobase)
 - [问题反馈](https://github.com/ncobase/cli/issues)
-
-## 社区
-
-- 微信群：[添加管理员]
-- Discord：[链接]
-- 论坛：[链接]
 
 ## 致谢
 
