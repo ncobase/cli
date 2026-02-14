@@ -1,0 +1,21 @@
+package config
+
+import (
+	"github.com/ncobase/ncore/config"
+)
+
+// IsProd returns true if the current environment is production
+func IsProd(c *config.Config) bool {
+	if c == nil {
+		return false
+	}
+	return c.IsProd()
+}
+
+// IsDev returns true if the current environment is development
+func IsDev(c *config.Config) bool {
+	if c == nil {
+		return true
+	}
+	return !c.IsProd()
+}

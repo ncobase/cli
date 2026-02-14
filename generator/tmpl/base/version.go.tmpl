@@ -1,0 +1,69 @@
+package version
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"runtime"
+)
+
+var (
+	// Version is the semantic version
+	Version = "0.1.0"
+
+	// BuildTime is the build time
+	BuildTime = "unknown"
+
+	// GitCommit is the git commit hash
+	GitCommit = "unknown"
+
+	// GitBranch is the git branch name
+	GitBranch = "unknown"
+
+	// GoVersion is the go version used to build
+	GoVersion = runtime.Version()
+)
+
+// VersionInfo contains version information
+type VersionInfo struct {
+	Version   string `json:"version"`
+	BuildTime string `json:"build_time"`
+	GitCommit string `json:"git_commit"`
+	GitBranch string `json:"git_branch"`
+	GoVersion string `json:"go_version"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+}
+
+// GetVersionInfo returns version information
+func GetVersionInfo() *VersionInfo {
+	return &VersionInfo{
+		Version:   Version,
+		BuildTime: BuildTime,
+		GitCommit: GitCommit,
+		GitBranch: GitBranch,
+		GoVersion: GoVersion,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+	}
+}
+
+// String returns a string representation of version info
+func (v *VersionInfo) String() string {
+	data, _ := json.MarshalIndent(v, "", "  ")
+	return string(data)
+}
+
+// Flags handles version flags
+func Flags() {
+	version := flag.Bool("version", false, "Print version information")
+	v := flag.Bool("v", false, "Print version information (shorthand)")
+
+	flag.Parse()
+
+	if *version || *v {
+		fmt.Println(GetVersionInfo())
+		os.Exit(0)
+	}
+}

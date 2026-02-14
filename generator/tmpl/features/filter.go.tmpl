@@ -1,0 +1,175 @@
+package features
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+// FilterOperator represents filter operation type
+type FilterOperator string
+
+const (
+	OperatorEq       FilterOperator = "eq"      // Equal
+	OperatorNe       FilterOperator = "ne"      // Not equal
+	OperatorGt       FilterOperator = "gt"      // Greater than
+	OperatorGte      FilterOperator = "gte"     // Greater than or equal
+	OperatorLt       FilterOperator = "lt"      // Less than
+	OperatorLte      FilterOperator = "lte"     // Less than or equal
+	OperatorIn       FilterOperator = "in"      // In array
+	OperatorNin      FilterOperator = "nin"     // Not in array
+	OperatorLike     FilterOperator = "like"    // Like (contains)
+	OperatorNotLike  FilterOperator = "notlike" // Not like
+	OperatorIsNull   FilterOperator = "isnull"  // Is null
+	OperatorNotNull  FilterOperator = "notnull" // Not null
+	OperatorBetween  FilterOperator = "between" // Between
+)
+
+// Filter represents a filter condition
+type Filter struct {
+	Field    string         `json:"field"`
+	Operator FilterOperator `json:"operator"`
+	Value    interface{}    `json:"value"`
+}
+
+// SortOrder represents sort direction
+type SortOrder string
+
+const (
+	SortAsc  SortOrder = "asc"
+	SortDesc SortOrder = "desc"
+)
+
+// Sort represents a sort condition
+type Sort struct {
+	Field string    `json:"field"`
+	Order SortOrder `json:"order"`
+}
+
+// FilterRequest holds filter and sort parameters
+type FilterRequest struct {
+	Filters []Filter `json:"filters"`
+	Sorts   []Sort   `json:"sorts"`
+}
+
+// ParseFilterRequest extracts filter parameters from query string
+func ParseFilterRequest(c *gin.Context) *FilterRequest {
+	req := &FilterRequest{
+		Filters: make([]Filter, 0),
+		Sorts:   make([]Sort, 0),
+	}
+
+	// Parse filters from query params
+	// Example: ?filter[name][eq]=John&filter[age][gte]=18
+	for key, values := range c.Request.URL.Query() {
+		if strings.HasPrefix(key, "filter[") && len(values) > 0 {
+			parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(key, "filter["), "]"), "][")
+			if len(parts) == 2 {
+				req.Filters = append(req.Filters, Filter{
+					Field:    parts[0],
+					Operator: FilterOperator(parts[1]),
+					Value:    values[0],
+				})
+			}
+		}
+	}
+
+	// Parse sorts from query params
+	// Example: ?sort=name:asc,age:desc
+	sortStr := c.Query("sort")
+	if sortStr != "" {
+		sortParts := strings.Split(sortStr, ",")
+		for _, part := range sortParts {
+			fieldOrder := strings.Split(strings.TrimSpace(part), ":")
+			if len(fieldOrder) == 2 {
+				req.Sorts = append(req.Sorts, Sort{
+					Field: fieldOrder[0],
+					Order: SortOrder(fieldOrder[1]),
+				})
+			} else if len(fieldOrder) == 1 {
+				req.Sorts = append(req.Sorts, Sort{
+					Field: fieldOrder[0],
+					Order: SortAsc,
+				})
+			}
+		}
+	}
+
+	return req
+}
+
+// BuildSQLWhere builds SQL WHERE clause from filters
+func BuildSQLWhere(filters []Filter) (string, []interface{}) {
+	if len(filters) == 0 {
+		return "", nil
+	}
+
+	var conditions []string
+	var args []interface{}
+
+	for i, filter := range filters {
+		placeholder := fmt.Sprintf("$%d", i+1)
+
+		switch filter.Operator {
+		case OperatorEq:
+			conditions = append(conditions, fmt.Sprintf("%s = %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorNe:
+			conditions = append(conditions, fmt.Sprintf("%s != %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorGt:
+			conditions = append(conditions, fmt.Sprintf("%s > %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorGte:
+			conditions = append(conditions, fmt.Sprintf("%s >= %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorLt:
+			conditions = append(conditions, fmt.Sprintf("%s < %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorLte:
+			conditions = append(conditions, fmt.Sprintf("%s <= %s", filter.Field, placeholder))
+			args = append(args, filter.Value)
+
+		case OperatorLike:
+			conditions = append(conditions, fmt.Sprintf("%s LIKE %s", filter.Field, placeholder))
+			args = append(args, fmt.Sprintf("%%%v%%", filter.Value))
+
+		case OperatorNotLike:
+			conditions = append(conditions, fmt.Sprintf("%s NOT LIKE %s", filter.Field, placeholder))
+			args = append(args, fmt.Sprintf("%%%v%%", filter.Value))
+
+		case OperatorIsNull:
+			conditions = append(conditions, fmt.Sprintf("%s IS NULL", filter.Field))
+
+		case OperatorNotNull:
+			conditions = append(conditions, fmt.Sprintf("%s IS NOT NULL", filter.Field))
+		}
+	}
+
+	where := strings.Join(conditions, " AND ")
+	return where, args
+}
+
+// BuildSQLOrderBy builds SQL ORDER BY clause from sorts
+func BuildSQLOrderBy(sorts []Sort) string {
+	if len(sorts) == 0 {
+		return ""
+	}
+
+	var orderBy []string
+	for _, sort := range sorts {
+		direction := "ASC"
+		if sort.Order == SortDesc {
+			direction = "DESC"
+		}
+		orderBy = append(orderBy, fmt.Sprintf("%s %s", sort.Field, direction))
+	}
+
+	return strings.Join(orderBy, ", ")
+}

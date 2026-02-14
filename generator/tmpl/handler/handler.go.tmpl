@@ -1,0 +1,17 @@
+package handler
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/net/resp"
+)
+
+// GetExample is an example handler
+func (h *handler) GetExample(c *gin.Context) {
+	result, err := h.svc.GetExample(c.Request.Context())
+	if err != nil {
+		resp.Fail(c.Writer, resp.BadRequest(err.Error()))
+		return
+	}
+
+	resp.Success(c.Writer, result)
+}

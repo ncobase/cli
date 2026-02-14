@@ -1,0 +1,39 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/ecode"
+	"github.com/ncobase/ncore/net/resp"
+
+	"{{ .PackagePath }}/handler"
+	appConfig "{{ .PackagePath }}/internal/config"
+)
+
+// ginServer creates and initializes the Gin engine
+func ginServer(conf *config.Config, h handler.Interface) (*gin.Engine, error) {
+	// Set gin mode
+	if appConfig.IsProd(conf) {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
+	// Create gin engine
+	engine := gin.New()
+
+	// Recovery middleware
+	engine.Use(gin.Recovery())
+
+	// Register API routes
+	registerRest(engine, conf, h)
+
+	// No route handler
+	engine.NoRoute(func(c *gin.Context) {
+		resp.Fail(c.Writer, resp.NotFound(ecode.Text(http.StatusNotFound)))
+	})
+
+	return engine, nil
+}

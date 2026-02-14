@@ -1,0 +1,88 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"github.com/ncobase/ncore/config"
+	extm "github.com/ncobase/ncore/extension/manager"
+	"github.com/ncobase/ncore/logging/logger"
+
+	"{{ .PackagePath }}/data"
+	"{{ .PackagePath }}/data/repository"
+	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/service"
+)
+
+// Server represents the application server
+type Server struct {
+	config  *config.Config
+	handler http.Handler
+	cleanup func()
+}
+
+// New creates a new server instance
+func New(conf *config.Config) (*Server, error) {
+	// Initialize Extension Manager
+	em, err := extm.NewManager(conf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize extension manager: %w", err)
+	}
+
+	// Initialize Data Layer (Database)
+	d, cleanupData, err := data.New(conf.Data, conf.Environment)
+	if err != nil {
+		em.Cleanup()
+		return nil, fmt.Errorf("failed to initialize data layer: %w", err)
+	}
+
+	// Initialize Repository Layer
+	repo := repository.New(d)
+
+	// Initialize Service Layer
+	svc := service.New(repo)
+
+	// Initialize Handler Layer
+	h := handler.New(svc)
+
+	// Initialize HTTP server
+	router, err := ginServer(conf, h)
+	if err != nil {
+		if cleanupData != nil {
+			cleanupData()
+		}
+		em.Cleanup()
+		return nil, fmt.Errorf("failed to initialize HTTP server: %w", err)
+	}
+
+	return &Server{
+		config:  conf,
+		handler: router,
+		cleanup: func() {
+			logger.Debug(context.Background(), "Cleaning up server resources...")
+
+			if err := svc.Close(); err != nil {
+				logger.Errorf(context.Background(), "Error during service cleanup: %v", err)
+			}
+
+			if cleanupData != nil {
+				cleanupData()
+			}
+
+			em.Cleanup()
+		},
+	}, nil
+}
+
+// Handler returns the HTTP handler
+func (s *Server) Handler() http.Handler {
+	return s.handler
+}
+
+// Cleanup performs server cleanup
+func (s *Server) Cleanup() {
+	if s.cleanup != nil {
+		s.cleanup()
+	}
+}

@@ -1,0 +1,19 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+
+	"gorm.io/gorm"
+	"{{ .PackagePath }}/data/model"
+)
+
+// FindExample finds an example by ID using GORM
+func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
+	// Access database via r.d.GormClient (master) or r.d.GormRead (read replica)
+
+	// Example implementation would go here
+	_ = id
+
+	return nil, fmt.Errorf("not implemented")
+}

@@ -1,0 +1,206 @@
+package features
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+)
+
+// StorageProvider defines the interface for storage backends
+type StorageProvider interface {
+	// Put uploads a file
+	Put(ctx context.Context, path string, reader io.Reader, size int64, contentType string) error
+
+	// Get retrieves a file
+	Get(ctx context.Context, path string) (io.ReadCloser, error)
+
+	// Delete removes a file
+	Delete(ctx context.Context, path string) error
+
+	// Exists checks if a file exists
+	Exists(ctx context.Context, path string) (bool, error)
+
+	// GetURL returns the public URL for a file
+	GetURL(ctx context.Context, path string) (string, error)
+
+	// GetSignedURL returns a signed URL for temporary access
+	GetSignedURL(ctx context.Context, path string, expiry time.Duration) (string, error)
+
+	// List lists files in a directory
+	List(ctx context.Context, prefix string) ([]string, error)
+
+	// Copy copies a file
+	Copy(ctx context.Context, srcPath, dstPath string) error
+
+	// Move moves a file
+	Move(ctx context.Context, srcPath, dstPath string) error
+}
+
+// LocalStorageProvider implements local filesystem storage
+type LocalStorageProvider struct {
+	basePath string
+	baseURL  string
+}
+
+// NewLocalStorageProvider creates a new local storage provider
+func NewLocalStorageProvider(basePath, baseURL string) *LocalStorageProvider {
+	return &LocalStorageProvider{
+		basePath: basePath,
+		baseURL:  baseURL,
+	}
+}
+
+// Put uploads a file to local storage
+func (p *LocalStorageProvider) Put(ctx context.Context, path string, reader io.Reader, size int64, contentType string) error {
+	// Implementation for local file storage
+	// This is a placeholder - implement actual file writing logic
+	return fmt.Errorf("not implemented")
+}
+
+// Get retrieves a file from local storage
+func (p *LocalStorageProvider) Get(ctx context.Context, path string) (io.ReadCloser, error) {
+	// Implementation for local file retrieval
+	return nil, fmt.Errorf("not implemented")
+}
+
+// Delete removes a file from local storage
+func (p *LocalStorageProvider) Delete(ctx context.Context, path string) error {
+	// Implementation for file deletion
+	return fmt.Errorf("not implemented")
+}
+
+// Exists checks if a file exists in local storage
+func (p *LocalStorageProvider) Exists(ctx context.Context, path string) (bool, error) {
+	// Implementation for existence check
+	return false, fmt.Errorf("not implemented")
+}
+
+// GetURL returns the public URL for a file
+func (p *LocalStorageProvider) GetURL(ctx context.Context, path string) (string, error) {
+	return fmt.Sprintf("%s/%s", p.baseURL, path), nil
+}
+
+// GetSignedURL returns a signed URL (not applicable for local storage)
+func (p *LocalStorageProvider) GetSignedURL(ctx context.Context, path string, expiry time.Duration) (string, error) {
+	// Local storage doesn't support signed URLs
+	return p.GetURL(ctx, path)
+}
+
+// List lists files in a directory
+func (p *LocalStorageProvider) List(ctx context.Context, prefix string) ([]string, error) {
+	// Implementation for directory listing
+	return nil, fmt.Errorf("not implemented")
+}
+
+// Copy copies a file
+func (p *LocalStorageProvider) Copy(ctx context.Context, srcPath, dstPath string) error {
+	// Implementation for file copying
+	return fmt.Errorf("not implemented")
+}
+
+// Move moves a file
+func (p *LocalStorageProvider) Move(ctx context.Context, srcPath, dstPath string) error {
+	// Implementation for file moving
+	return fmt.Errorf("not implemented")
+}
+
+// S3StorageProvider implements AWS S3 storage
+type S3StorageProvider struct {
+	bucket string
+	region string
+	// s3Client *s3.Client // Add AWS SDK client here
+}
+
+// NewS3StorageProvider creates a new S3 storage provider
+func NewS3StorageProvider(bucket, region string) *S3StorageProvider {
+	return &S3StorageProvider{
+		bucket: bucket,
+		region: region,
+	}
+}
+
+// Put uploads a file to S3
+func (p *S3StorageProvider) Put(ctx context.Context, path string, reader io.Reader, size int64, contentType string) error {
+	// Implementation using AWS SDK
+	// Example:
+	// _, err := p.s3Client.PutObject(ctx, &s3.PutObjectInput{
+	//     Bucket:      aws.String(p.bucket),
+	//     Key:         aws.String(path),
+	//     Body:        reader,
+	//     ContentType: aws.String(contentType),
+	// })
+	return fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// Get retrieves a file from S3
+func (p *S3StorageProvider) Get(ctx context.Context, path string) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// Delete removes a file from S3
+func (p *S3StorageProvider) Delete(ctx context.Context, path string) error {
+	return fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// Exists checks if a file exists in S3
+func (p *S3StorageProvider) Exists(ctx context.Context, path string) (bool, error) {
+	return false, fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// GetURL returns the public URL for an S3 file
+func (p *S3StorageProvider) GetURL(ctx context.Context, path string) (string, error) {
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", p.bucket, p.region, path), nil
+}
+
+// GetSignedURL returns a pre-signed URL for S3
+func (p *S3StorageProvider) GetSignedURL(ctx context.Context, path string, expiry time.Duration) (string, error) {
+	return "", fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// List lists files in S3
+func (p *S3StorageProvider) List(ctx context.Context, prefix string) ([]string, error) {
+	return nil, fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// Copy copies a file in S3
+func (p *S3StorageProvider) Copy(ctx context.Context, srcPath, dstPath string) error {
+	return fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// Move moves a file in S3
+func (p *S3StorageProvider) Move(ctx context.Context, srcPath, dstPath string) error {
+	return fmt.Errorf("not implemented - add AWS SDK dependency")
+}
+
+// StorageManager manages multiple storage providers
+type StorageManager struct {
+	providers map[string]StorageProvider
+	default   string
+}
+
+// NewStorageManager creates a new storage manager
+func NewStorageManager(defaultProvider string) *StorageManager {
+	return &StorageManager{
+		providers: make(map[string]StorageProvider),
+		default:   defaultProvider,
+	}
+}
+
+// Register registers a storage provider
+func (m *StorageManager) Register(name string, provider StorageProvider) {
+	m.providers[name] = provider
+}
+
+// Get returns a storage provider by name
+func (m *StorageManager) Get(name string) (StorageProvider, error) {
+	if provider, ok := m.providers[name]; ok {
+		return provider, nil
+	}
+	return nil, fmt.Errorf("storage provider %s not found", name)
+}
+
+// Default returns the default storage provider
+func (m *StorageManager) Default() (StorageProvider, error) {
+	return m.Get(m.default)
+}

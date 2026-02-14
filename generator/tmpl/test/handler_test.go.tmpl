@@ -1,0 +1,239 @@
+package handler_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/service"
+	"{{ .PackagePath }}/data/repository"
+)
+
+func setupTestRouter(h handler.Interface) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Register routes
+	v1 := router.Group("/api/v1")
+	{
+		v1.GET("/example", h.GetExample)
+		// Add more routes as needed
+	}
+
+	return router
+}
+
+func TestGetExample(t *testing.T) {
+	// Setup
+	// Note: In production, use proper mocks for dependencies
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	h := handler.New(svc)
+	router := setupTestRouter(h)
+
+	t.Run("successful request", func(t *testing.T) {
+		// Create request
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/example", nil)
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Assert
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		// Parse response
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		// Verify response structure
+		assert.Contains(t, response, "code")
+		assert.Contains(t, response, "data")
+	})
+
+	t.Run("validation error", func(t *testing.T) {
+		// Test validation scenarios
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/example?invalid=param", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// Depending on your validation logic
+		// assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestCreateExample(t *testing.T) {
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	h := handler.New(svc)
+	router := setupTestRouter(h)
+
+	t.Run("successful creation", func(t *testing.T) {
+		// Prepare request body
+		requestBody := map[string]interface{}{
+			"name": "Test Item",
+			"code": "TEST001",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		// Create request
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/example", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		// Execute
+		router.ServeHTTP(w, req)
+
+		// Assert
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, int(response["code"].(float64)))
+	})
+
+	t.Run("invalid request body", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/example", bytes.NewBufferString("invalid json"))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("missing required fields", func(t *testing.T) {
+		requestBody := map[string]interface{}{
+			"name": "", // Empty required field
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/example", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestUpdateExample(t *testing.T) {
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	h := handler.New(svc)
+	router := setupTestRouter(h)
+
+	t.Run("successful update", func(t *testing.T) {
+		requestBody := map[string]interface{}{
+			"name": "Updated Item",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/example/1", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		requestBody := map[string]interface{}{
+			"name": "Updated Item",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/example/999999", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestDeleteExample(t *testing.T) {
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	h := handler.New(svc)
+	router := setupTestRouter(h)
+
+	t.Run("successful deletion", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/example/1", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/example/999999", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		// assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestListExamples(t *testing.T) {
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	h := handler.New(svc)
+	router := setupTestRouter(h)
+
+	t.Run("successful list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/examples", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+	})
+
+	t.Run("with pagination", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/examples?page=1&page_size=10", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("with filtering", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/examples?filter[name][like]=test", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("with sorting", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/examples?sort=name:asc,created_at:desc", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}

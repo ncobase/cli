@@ -1,0 +1,38 @@
+package service
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+
+	"{{ .PackagePath }}/data/model"
+)
+
+// Close performs cleanup operations for the service
+func (s *service) Close() error {
+	// Add cleanup logic here if needed
+	return nil
+}
+
+// GetExample is an example service method
+func (s *service) GetExample(ctx context.Context) (*model.ExampleResponse, error) {
+	// Example: Call repository
+	// result, err := s.repo.FindExample(ctx, "some-id")
+	// if err != nil {
+	//     return nil, err
+	// }
+
+	// Mock example for demonstration
+	example := &model.Example{
+		ID:        uuid.New().String(),
+		Name:      "Example Model",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	return &model.ExampleResponse{
+		ID:   example.ID,
+		Name: example.Name,
+	}, nil
+}

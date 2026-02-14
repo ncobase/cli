@@ -100,8 +100,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/data"
+	"github.com/ncobase/ncore/logging/logger"
 	{{if .DBDriver}}
 	_ "github.com/ncobase/ncore/data/{{.DBDriver}}"
 	{{end}}
@@ -120,11 +122,10 @@ import (
 	{{if .UseKafka}}
 	_ "github.com/ncobase/ncore/data/kafka"
 	{{end}}
-    {{if .UseRabbitMQ}}
-    _ "github.com/ncobase/ncore/data/rabbitmq"
-    {{end}}
-    "github.com/ncobase/ncore/logging/logger"
-	"github.com/ncobase/ncore/data/search"
+	{{if .UseRabbitMQ}}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+	{{end}}
+
 	"{{ .PackagePath }}/data/ent"
 	"{{ .PackagePath }}/data/ent/migrate"
 
@@ -135,7 +136,6 @@ import (
 
 // Data .
 type Data struct {
-	SearchClient *search.Client
 	*data.Data
 	EC     *ent.Client // master ent client
 	ECRead *ent.Client // slave ent client for read operations
@@ -179,10 +179,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 		entClientRead = entClient
 	}
 
-	searchClient := search.NewClientFromData(d)
-
 	return &Data{
-		SearchClient: searchClient,
 		Data:   d,
 		EC:     entClient,
 		ECRead: entClientRead,
@@ -339,43 +336,6 @@ func (d *Data) WithEntTxRead(ctx context.Context, fn func(ctx context.Context, t
 	return tx.Commit()
 }
 
-// Search methods adapter
-
-func (d *Data) IndexDocument(ctx context.Context, req *search.IndexRequest) error {
-	if d.SearchClient == nil {
-		return nil
-	}
-	return d.SearchClient.Index(ctx, req)
-}
-
-func (d *Data) DeleteDocument(ctx context.Context, index, id string) error {
-	if d.SearchClient == nil {
-		return nil
-	}
-	return d.SearchClient.Delete(ctx, index, id)
-}
-
-func (d *Data) Search(ctx context.Context, req *search.Request) (*search.Response, error) {
-	if d.SearchClient == nil {
-		return nil, fmt.Errorf("search client not initialized")
-	}
-	return d.SearchClient.Search(ctx, req)
-}
-
-func (d *Data) GetAvailableSearchEngines() []string {
-	if d.SearchClient == nil {
-		return []string{}
-	}
-	engines := d.SearchClient.GetAvailableEngines()
-	res := make([]string, len(engines))
-	for i, e := range engines {
-		res[i] = string(e)
-	}
-	return res
-}
-
-
-
 /* Example usage:
 
 // Ent operations
@@ -420,102 +380,56 @@ func DataTemplateWithGorm(name, extType string) string {
 	return fmt.Sprintf(`package data
 
 import (
-    "context"
-    "database/sql"
-    "fmt"
-    "github.com/ncobase/ncore/config"
-    "github.com/ncobase/ncore/data"
-    {{if .DBDriver}}
-    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
-    {{end}}
-    {{if .UseRedis}}
-    _ "github.com/ncobase/ncore/data/redis"
-    {{end}}
-    {{if .UseElastic}}
-    _ "github.com/ncobase/ncore/data/elasticsearch"
-    {{end}}
-    {{if .UseOpenSearch}}
-    _ "github.com/ncobase/ncore/data/opensearch"
-    {{end}}
-    {{if .UseMeili}}
-    _ "github.com/ncobase/ncore/data/meilisearch"
-    {{end}}
-    {{if .UseKafka}}
-    _ "github.com/ncobase/ncore/data/kafka"
-    {{end}}
-    {{if .UseRabbitMQ}}
-    _ "github.com/ncobase/ncore/data/rabbitmq"
-    {{end}}
-    {{if .UseS3Storage}}
-    _ "github.com/ncobase/ncore/data/s3"
-    {{end}}
-    {{if .UseMinio}}
-    _ "github.com/ncobase/ncore/data/minio"
-    {{end}}
-    {{if .UseAliyun}}
-    _ "github.com/ncobase/ncore/data/aliyun"
-    {{end}}
-    "github.com/ncobase/ncore/logging/logger"
+	"context"
+	"database/sql"
+	"fmt"
 
-    "gorm.io/driver/mysql"
-    "gorm.io/driver/postgres"
-    "gorm.io/driver/sqlite"
-    "gorm.io/gorm"
-    "gorm.io/gorm/logger"
-)
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/data"
+	"github.com/ncobase/ncore/logging/logger"
+	{{if .DBDriver}}
+	_ "github.com/ncobase/ncore/data/{{.DBDriver}}"
+	{{end}}
+	{{if .UseRedis}}
+	_ "github.com/ncobase/ncore/data/redis"
+	{{end}}
+	{{if .UseElastic}}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
+	{{end}}
+	{{if .UseOpenSearch}}
+	_ "github.com/ncobase/ncore/data/opensearch"
+	{{end}}
+	{{if .UseMeili}}
+	_ "github.com/ncobase/ncore/data/meilisearch"
+	{{end}}
+	{{if .UseKafka}}
+	_ "github.com/ncobase/ncore/data/kafka"
+	{{end}}
+	{{if .UseRabbitMQ}}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+	{{end}}
+	{{if .UseS3Storage}}
+	_ "github.com/ncobase/ncore/data/s3"
+	{{end}}
+	{{if .UseMinio}}
+	_ "github.com/ncobase/ncore/data/minio"
+	{{end}}
+	{{if .UseAliyun}}
+	_ "github.com/ncobase/ncore/data/aliyun"
+	{{end}}
 
-import (
-    "context"
-    "database/sql"
-    "fmt"
-    "github.com/ncobase/ncore/config"
-    "github.com/ncobase/ncore/data"
-    {{if .DBDriver}}
-    _ "github.com/ncobase/ncore/data/{{.DBDriver}}"
-    {{end}}
-    {{if .UseRedis}}
-    _ "github.com/ncobase/ncore/data/redis"
-    {{end}}
-    {{if .UseElastic}}
-    _ "github.com/ncobase/ncore/data/elasticsearch"
-    {{end}}
-    {{if .UseOpenSearch}}
-    _ "github.com/ncobase/ncore/data/opensearch"
-    {{end}}
-    {{if .UseMeili}}
-    _ "github.com/ncobase/ncore/data/meilisearch"
-    {{end}}
-    {{if .UseKafka}}
-    _ "github.com/ncobase/ncore/data/kafka"
-    {{end}}
-    {{if .UseRabbitMQ}}
-    _ "github.com/ncobase/ncore/data/rabbitmq"
-    {{end}}
-    {{if .UseS3Storage}}
-    _ "github.com/ncobase/ncore/data/s3"
-    {{end}}
-    {{if .UseMinio}}
-    _ "github.com/ncobase/ncore/data/minio"
-    {{end}}
-    {{if .UseAliyun}}
-    _ "github.com/ncobase/ncore/data/aliyun"
-    {{end}}
-    "github.com/ncobase/ncore/logging/logger"
-    "github.com/ncobase/ncore/data/search"
-
-    "gorm.io/driver/mysql"
-    "gorm.io/driver/postgres"
-    "gorm.io/driver/sqlite"
-    "gorm.io/gorm"
-    "gorm.io/gorm/logger"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Data .
 type Data struct {
-    SearchClient *search.Client
-    *data.Data
-    GormClient *gorm.DB    // master gorm client
-    GormRead   *gorm.DB    // slave gorm client for read operations
+	*data.Data
+	GormClient *gorm.DB    // master gorm client
+	GormRead   *gorm.DB    // slave gorm client for read operations
 }
 
 // New creates a new Database Connection.
@@ -555,14 +469,11 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 			gormRead = gormClient
 		}
 
-    searchClient := search.NewClientFromData(d)
-
-    return &Data{
-        SearchClient: searchClient,
-        Data:       d,
-        GormClient: gormClient,
-        GormRead:   gormRead,
-    }, cleanup, nil
+	return &Data{
+		Data:       d,
+		GormClient: gormClient,
+		GormRead:   gormRead,
+	}, cleanup, nil
 }
 
 // newGormClient creates a new GORM client.
@@ -584,11 +495,11 @@ func newGormClient(db *sql.DB, conf *config.DBNode) (*gorm.DB, error) {
     }
 
     gormConfig := &gorm.Config{
-        Logger: logger.Default.LogMode(logger.Silent),
+        Logger: gormlogger.Default.LogMode(gormlogger.Silent),
     }
 
     if conf.Logging {
-        gormConfig.Logger = logger.Default.LogMode(logger.Info)
+        gormConfig.Logger = gormlogger.Default.LogMode(gormlogger.Info)
     }
 
     return gorm.Open(dialector, gormConfig)

@@ -31,6 +31,8 @@ func StandaloneMainTemplate(d *Data) string {
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -39,34 +41,33 @@ import (
 	"syscall"
 	"time"
 
-	"{{ .PackagePath }}/internal/server"
-	"{{ .PackagePath }}/internal/version"
+	"%s/internal/server"
+	"%s/internal/version"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
 %s)
 
 const (
-	shutdownTimeout = 3 * time.Second // service shutdown timeout
+	shutdownTimeout = 5 * time.Second // service shutdown timeout
 )
 
 func main() {
+	flag.Parse()
+
 	// Handle version flags
 	version.Flags()
 
-	// Set logger version
-	logger.SetVersion(version.GetVersionInfo().Version)
-
-	// load config
+	// Load config
 	conf := loadConfig()
 
-	// Application name
-	appName := conf.AppName
+	// Set logger version
+	logger.SetVersion(version.GetVersionInfo().Version)
 
 	// Initialize logger
 	cleanupLogger := initializeLogger(conf)
 	defer cleanupLogger()
 
-	logger.Infof(context.Background(), "Starting %%s", appName)
+	logger.Infof(context.Background(), "Starting %%s", conf.AppName)
 
 	if err := runServer(conf); err != nil {
 		logger.Fatalf(context.Background(), "Server error: %%v", err)
@@ -75,39 +76,35 @@ func main() {
 
 // runServer creates and runs HTTP server
 func runServer(conf *config.Config) error {
-	// create server
+	// Create server
 	s, err := server.New(conf)
 	if err != nil {
-		return fmt.Errorf("failed to create server: %w", err)
+		return fmt.Errorf("failed to create server: %%w", err)
 	}
 	defer s.Cleanup()
 
-	// create listener
+	// Create listener
 	listener, err := createListener(conf)
 	if err != nil {
-		return fmt.Errorf("failed to create listener: %w", err)
+		return fmt.Errorf("failed to create listener: %%w", err)
 	}
+	defer listener.Close()
 
-	defer func(listener net.Listener) {
-		_ = listener.Close()
-	}(listener)
-
-	// create server instance
+	// Create HTTP server instance
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", conf.Host, conf.Port),
-		Handler: s.Handler(),
+		Addr:         fmt.Sprintf("%%s:%%d", conf.Host, conf.Port),
+		Handler:      s.Handler(),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-	// create error channel
+	// Start server in goroutine
 	errChan := make(chan error, 1)
-
-	// start server
 	go func() {
 		logger.Infof(context.Background(), "Listening and serving HTTP on: %%s", srv.Addr)
-		if err := srv.Serve(listener); err != nil {
-			logger.Errorf(context.Background(), "Listen error: %%s", err)
-		} else {
-			logger.Infof(context.Background(), "Server closed")
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errChan <- fmt.Errorf("server error: %%w", err)
 		}
 	}()
 
@@ -123,12 +120,13 @@ func createListener(conf *config.Config) (net.Listener, error) {
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("error starting server: %%w", err)
+		return nil, fmt.Errorf("failed to create listener: %%w", err)
 	}
 
-	// update port if dynamically allocated
+	// Update port if dynamically allocated
 	if conf.Port == 0 {
 		conf.Port = listener.Addr().(*net.TCPAddr).Port
+		logger.Infof(context.Background(), "Using dynamically allocated port: %%d", conf.Port)
 	}
 
 	return listener, nil
@@ -138,18 +136,18 @@ func createListener(conf *config.Config) (net.Listener, error) {
 func loadConfig() *config.Config {
 	conf, err := config.Init()
 	if err != nil {
-		logger.Fatalf(context.Background(), "[Config] Initialization error: %%+v", err)
+		logger.Fatalf(context.Background(), "Failed to load config: %%+v", err)
 	}
 	return conf
 }
 
 // initializeLogger initializes the logger
 func initializeLogger(conf *config.Config) func() {
-	l, err := logger.New(conf.Logger)
+	cleanup, err := logger.New(conf.Logger)
 	if err != nil {
-		logger.Fatalf(context.Background(), "[Logger] Initialization error: %%+v", err)
+		logger.Fatalf(context.Background(), "Failed to initialize logger: %%+v", err)
 	}
-	return l
+	return cleanup
 }
 
 // gracefulShutdown gracefully shuts down the server
@@ -159,48 +157,42 @@ func gracefulShutdown(srv *http.Server, errChan chan error) error {
 
 	select {
 	case err := <-errChan:
-		return fmt.Errorf("server error: %%w", err)
+		return err
 
-	case <-quit:
+	case sig := <-quit:
+		logger.Infof(context.Background(), "Received signal: %%s, shutting down gracefully...", sig)
+
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
-		// Execute shutdown logic
 		if err := srv.Shutdown(ctx); err != nil {
-			logger.Errorf(context.Background(), "Shutdown error: %%v", err)
-			return fmt.Errorf("shutdown error: %%w", err)
+			return fmt.Errorf("server forced to shutdown: %%w", err)
 		}
 
-		// wait for server to shutdown
-		<-ctx.Done()
-		if ctx.Err() == context.DeadlineExceeded {
-			logger.Debugf(context.Background(), "Shutdown timed out after %%s", shutdownTimeout)
-		} else {
-			logger.Debugf(context.Background(), "Shutdown completed within %%s", shutdownTimeout)
-		}
-
+		logger.Info(context.Background(), "Server shutdown completed")
 		return nil
 	}
 }
-`, imports)
+`, d.PackagePath, d.PackagePath, imports)
 }
 
 // StandaloneServerTemplate generates the server.go file for internal/server
 func StandaloneServerTemplate(name, moduleName string) string {
-	return `package server
+	return fmt.Sprintf(`package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/ncobase/ncore/config"
 	extm "github.com/ncobase/ncore/extension/manager"
 	"github.com/ncobase/ncore/logging/logger"
 
-	"{{ .PackagePath }}/data"
-	"{{ .PackagePath }}/data/repository"
-	"{{ .PackagePath }}/handler"
-	"{{ .PackagePath }}/service"
+	"%s/data"
+	"%s/data/repository"
+	"%s/handler"
+	"%s/service"
 )
 
 // Server represents the application server
@@ -210,20 +202,19 @@ type Server struct {
 	cleanup func()
 }
 
-// New creates a new server instance.
+// New creates a new server instance
 func New(conf *config.Config) (*Server, error) {
 	// Initialize Extension Manager
 	em, err := extm.NewManager(conf)
 	if err != nil {
-		logger.Fatalf(context.Background(), "Failed initializing extension manager: %+v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize extension manager: %%w", err)
 	}
 
 	// Initialize Data Layer (Database)
 	d, cleanupData, err := data.New(conf.Data, conf.Environment)
 	if err != nil {
-		logger.Fatalf(context.Background(), "Failed initializing data layer: %+v", err)
-		return nil, err
+		em.Cleanup()
+		return nil, fmt.Errorf("failed to initialize data layer: %%w", err)
 	}
 
 	// Initialize Repository Layer
@@ -238,22 +229,27 @@ func New(conf *config.Config) (*Server, error) {
 	// Initialize HTTP server
 	router, err := ginServer(conf, h)
 	if err != nil {
-		logger.Fatalf(context.Background(), "Failed initializing http server: %+v", err)
-		cleanupData()
-		return nil, err
+		if cleanupData != nil {
+			cleanupData()
+		}
+		em.Cleanup()
+		return nil, fmt.Errorf("failed to initialize HTTP server: %%w", err)
 	}
 
 	return &Server{
 		config:  conf,
 		handler: router,
 		cleanup: func() {
-			// Cleanup when server shuts down
+			logger.Debug(context.Background(), "Cleaning up server resources...")
+
 			if err := svc.Close(); err != nil {
-				logger.Errorf(context.Background(), "Error during service cleanup: %+v", err)
+				logger.Errorf(context.Background(), "Error during service cleanup: %%v", err)
 			}
+
 			if cleanupData != nil {
 				cleanupData()
 			}
+
 			em.Cleanup()
 		},
 	}, nil
@@ -270,25 +266,26 @@ func (s *Server) Cleanup() {
 		s.cleanup()
 	}
 }
-`
+`, moduleName, moduleName, moduleName, moduleName)
 }
 
-// StandaloneGinTemplate generates the gin.go file for internal/server
+// StandaloneGinTemplate generates the http.go file for internal/server
 func StandaloneGinTemplate(name, moduleName string) string {
-	return `package server
+	return fmt.Sprintf(`package server
 
 import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/ecode"
 	"github.com/ncobase/ncore/net/resp"
-	"net/http"
-	"{{ .PackagePath }}/handler"
-	appConfig "{{ .PackagePath }}/internal/config"
 
-	"github.com/gin-gonic/gin"
+	"%s/handler"
+	appConfig "%s/internal/config"
 )
 
-// ginServer creates and initializes the server.
+// ginServer creates and initializes the Gin engine
 func ginServer(conf *config.Config, h handler.Interface) (*gin.Engine, error) {
 	// Set gin mode
 	if appConfig.IsProd(conf) {
@@ -300,68 +297,76 @@ func ginServer(conf *config.Config, h handler.Interface) (*gin.Engine, error) {
 	// Create gin engine
 	engine := gin.New()
 
-	// Add middleware here if needed
-	// engine.Use(middleware.Logger)
-	// engine.Use(middleware.CORSHandler)
+	// Recovery middleware
+	engine.Use(gin.Recovery())
 
 	// Register API routes
 	registerRest(engine, conf, h)
 
-	// No route
+	// No route handler
 	engine.NoRoute(func(c *gin.Context) {
 		resp.Fail(c.Writer, resp.NotFound(ecode.Text(http.StatusNotFound)))
 	})
 
 	return engine, nil
 }
-`
+`, moduleName, moduleName)
 }
 
 // StandaloneRestTemplate generates the rest.go file for internal/server
 func StandaloneRestTemplate(name, moduleName string) string {
-	return `package server
+	return fmt.Sprintf(`package server
 
 import (
 	"net/http"
-	"github.com/ncobase/ncore/config"
-	"{{ .PackagePath }}/internal/version"
-	"{{ .PackagePath }}/handler"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/config"
+
+	"%s/handler"
+	"%s/internal/version"
 )
 
-// registerRest registers the REST routes.
+// registerRest registers the REST routes
 func registerRest(e *gin.Engine, conf *config.Config, h handler.Interface) {
 	// Root endpoint
 	e.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "Service is running.")
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Service is running",
+			"name":    conf.AppName,
+			"version": version.GetVersionInfo().Version,
+		})
 	})
 
 	// Health check endpoint
 	e.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"name":   conf.AppName,
+			"status":  "healthy",
+			"name":    conf.AppName,
 			"version": version.GetVersionInfo().Version,
 		})
 	})
-
-	// API v1 routes
-	v1 := e.Group("/api/v1")
-	{
-		// Add your API routes here
-		v1.GET("/example", h.GetExample)
-	}
 
 	// Version endpoint
 	e.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, version.GetVersionInfo())
 	})
+
+	// API v1 routes
+	v1 := e.Group("/api/v1")
+	{
+		// Example endpoint
+		v1.GET("/example", h.GetExample)
+
+		// Add your API routes here
+		// v1.GET("/users", h.GetUsers)
+		// v1.POST("/users", h.CreateUser)
+	}
 }
-`
+`, moduleName, moduleName)
 }
 
-// StandaloneConfigTemplate generates the config.go file for standalone applications
+// StandaloneConfigTemplate generates the config.go file for internal/config
 func StandaloneConfigTemplate(name, moduleName string) string {
 	return `package config
 
@@ -369,36 +374,39 @@ import (
 	"github.com/ncobase/ncore/config"
 )
 
-// GetAppConfig returns the application-specific configuration
-func GetAppConfig(cfg *config.Config) *config.Config {
-	if cfg == nil {
-		return &config.Config{}
-	}
-	return cfg
-}
-
-// IsProd returns current environment is production
+// IsProd returns true if the current environment is production
 func IsProd(c *config.Config) bool {
 	if c == nil {
 		return false
 	}
 	return c.IsProd()
 }
+
+// IsDev returns true if the current environment is development
+func IsDev(c *config.Config) bool {
+	if c == nil {
+		return true
+	}
+	return !c.IsProd()
+}
 `
 }
 
 // StandaloneHandlerProviderTemplate generates the provider.go file for handler layer
 func StandaloneHandlerProviderTemplate(name, moduleName string) string {
-	return `package handler
+	return fmt.Sprintf(`package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	"{{ .PackagePath }}/service"
+	"%s/service"
 )
 
 // Interface defines the handler interface
 type Interface interface {
+	// Example endpoint
 	GetExample(c *gin.Context)
+
+	// Add your handler methods here
 }
 
 // handler implements the Interface
@@ -406,13 +414,13 @@ type handler struct {
 	svc service.Interface
 }
 
-// New creates a new handler
+// New creates a new handler instance
 func New(svc service.Interface) Interface {
 	return &handler{
 		svc: svc,
 	}
 }
-`
+`, moduleName)
 }
 
 // StandaloneHandlerTemplate generates the handler.go file (implementation)
@@ -420,8 +428,8 @@ func StandaloneHandlerTemplate(name, moduleName string) string {
 	return `package handler
 
 import (
-	"github.com/ncobase/ncore/net/resp"
 	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/net/resp"
 )
 
 // GetExample is an example handler
@@ -437,7 +445,52 @@ func (h *handler) GetExample(c *gin.Context) {
 `
 }
 
-// StandaloneModelTemplate generates the model.go file for standalone applications
+// StandaloneHandlerTestTemplate generates the handler test file
+func StandaloneHandlerTestTemplate(name, moduleName string) string {
+	return fmt.Sprintf(`package handler_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+
+	"%s/data"
+	"%s/data/repository"
+	"%s/handler"
+	"%s/service"
+)
+
+func TestGetExample(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+
+	// Mock dependencies (you should use proper mocks)
+	d := &data.Data{}
+	repo := repository.New(d)
+	svc := service.New(repo)
+	h := handler.New(svc)
+
+	// Create test router
+	router := gin.New()
+	router.GET("/api/v1/example", h.GetExample)
+
+	// Create test request
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/example", nil)
+	w := httptest.NewRecorder()
+
+	// Execute request
+	router.ServeHTTP(w, req)
+
+	// Assert
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+`, moduleName, moduleName, moduleName, moduleName)
+}
+
+// StandaloneModelTemplate generates the model.go file
 func StandaloneModelTemplate(name, moduleName string) string {
 	return `package model
 
@@ -464,17 +517,23 @@ type ExampleResponse struct {
 
 // StandaloneServiceProviderTemplate generates the provider.go file for service layer
 func StandaloneServiceProviderTemplate(name, moduleName string) string {
-	return `package service
+	return fmt.Sprintf(`package service
 
 import (
 	"context"
-	"{{ .PackagePath }}/data/repository"
-	"{{ .PackagePath }}/data/model"
+
+	"%s/data/model"
+	"%s/data/repository"
 )
 
 // Interface defines the service interface
 type Interface interface {
+	// Example method
 	GetExample(ctx context.Context) (*model.ExampleResponse, error)
+
+	// Add your service methods here
+
+	// Cleanup
 	Close() error
 }
 
@@ -483,38 +542,43 @@ type service struct {
 	repo repository.Interface
 }
 
-// New creates a new service
+// New creates a new service instance
 func New(repo repository.Interface) Interface {
 	return &service{
 		repo: repo,
 	}
 }
-`
+`, moduleName, moduleName)
 }
 
 // StandaloneServiceTemplate generates the service.go file (implementation)
 func StandaloneServiceTemplate(name, moduleName string) string {
-	return `package service
+	return fmt.Sprintf(`package service
 
 import (
 	"context"
-	"{{ .PackagePath }}/data/model"
 	"time"
 
 	"github.com/google/uuid"
+
+	"%s/data/model"
 )
 
 // Close performs cleanup operations for the service
 func (s *service) Close() error {
+	// Add cleanup logic here if needed
 	return nil
 }
 
 // GetExample is an example service method
 func (s *service) GetExample(ctx context.Context) (*model.ExampleResponse, error) {
-	// Call repository (mock example)
-	// result, err := s.repo.FindExample(ctx, "id")
+	// Example: Call repository
+	// result, err := s.repo.FindExample(ctx, "some-id")
+	// if err != nil {
+	//     return nil, err
+	// }
 
-	// This is a mock example
+	// Mock example for demonstration
 	example := &model.Example{
 		ID:        uuid.New().String(),
 		Name:      "Example Model",
@@ -525,25 +589,63 @@ func (s *service) GetExample(ctx context.Context) (*model.ExampleResponse, error
 	return &model.ExampleResponse{
 		ID:   example.ID,
 		Name: example.Name,
-	},
-nil
+	}, nil
 }
-`
+`, moduleName)
+}
+
+// StandaloneServiceTestTemplate generates the service test file
+func StandaloneServiceTestTemplate(name, moduleName string) string {
+	return fmt.Sprintf(`package service_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"%s/data"
+	"%s/data/repository"
+	"%s/service"
+)
+
+func TestGetExample(t *testing.T) {
+	// Setup
+	d := &data.Data{}
+	repo := repository.New(d)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	// Execute
+	result, err := svc.GetExample(context.Background())
+
+	// Assert
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotEmpty(t, result.ID)
+	assert.NotEmpty(t, result.Name)
+}
+`, moduleName, moduleName, moduleName)
 }
 
 // StandaloneRepositoryProviderTemplate generates the provider.go file for repository layer
 func StandaloneRepositoryProviderTemplate(name, moduleName string) string {
-	return `package repository
+	return fmt.Sprintf(`package repository
 
 import (
 	"context"
-	"{{ .PackagePath }}/data"
-	"{{ .PackagePath }}/data/model"
+
+	"%s/data"
+	"%s/data/model"
 )
 
 // Interface defines the repository interface
 type Interface interface {
+	// Example method
 	FindExample(ctx context.Context, id string) (*model.Example, error)
+
+	// Add your repository methods here
 }
 
 // repository implements the Interface
@@ -551,66 +653,60 @@ type repository struct {
 	d *data.Data
 }
 
-// New creates a new repository
+// New creates a new repository instance
 func New(d *data.Data) Interface {
 	return &repository{
 		d: d,
 	}
 }
-`
+`, moduleName, moduleName)
 }
 
 // StandaloneRepositoryTemplate generates the repository.go file (implementation)
 func StandaloneRepositoryTemplate(name, moduleName string, useMongo, useEnt, useGorm bool) string {
-	var imports string
-
-	// Basic imports
-	imports = fmt.Sprintf(`import (
+	imports := `import (
 	"context"
 	"fmt"
-	"{{ .PackagePath }}/data/model"
-`)
+`
 
-	// Add DB specific imports
-	if useMongo {
-		// imports += `	"go.mongodb.org/mongo-driver/mongo"`
-	}
 	if useEnt {
-		imports += fmt.Sprintf(`	"{{ .PackagePath }}/data/ent"
-	"entgo.io/ent/dialect"
-	"entgo.io/ent/dialect/sql"
-`)
+		imports += fmt.Sprintf(`	"%s/data/ent"
+`, moduleName)
 	}
+
 	if useGorm {
 		imports += `	"gorm.io/gorm"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 `
 	}
 
-	imports += `)
+	if useMongo {
+		imports += `	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 `
+	}
 
-	// This is just implementation methods, struct is defined in provider.go
+	imports += fmt.Sprintf(`	"%s/data/model"
+)
+`, moduleName)
+
+	implementation := `
+// FindExample finds an example by ID
+func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
+	// Access database via r.d
+	//
+	// For Ent: r.d.EC (master) or r.d.ECRead (read replica)
+	// For GORM: r.d.GormClient (master) or r.d.GormRead (read replica)
+	// For MongoDB: r.d.MC (master) or r.d.MCRead (read replica)
+
+	// Example implementation would go here
+	_ = id
+
+	return nil, fmt.Errorf("not implemented")
+}
+`
 
 	return fmt.Sprintf(`package repository
 
 %s
-
-// FindExample finds an example by ID
-func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
-	// Access database via r.d
-	// e.g., r.d.Conn.DB (GORM), r.d.Conn.Ent (Ent), r.d.MC (MongoDB)
-
-	// Example: using search API from ncore/data
-	// req := &search.IndexRequest{Index: "examples", Document: model.Example{ID: id}}
-	// err := r.d.IndexDocument(ctx, req)
-
-	fmt.Println("FindExample called")
-
-	// Mock return
-	return nil, nil
-}
-`, imports)
+%s`, imports, implementation)
 }

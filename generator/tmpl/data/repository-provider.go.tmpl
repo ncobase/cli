@@ -1,0 +1,28 @@
+package repository
+
+import (
+	"context"
+
+	"{{ .PackagePath }}/data"
+	"{{ .PackagePath }}/data/model"
+)
+
+// Interface defines the repository interface
+type Interface interface {
+	// Example method
+	FindExample(ctx context.Context, id string) (*model.Example, error)
+
+	// Add your repository methods here
+}
+
+// repository implements the Interface
+type repository struct {
+	d *data.Data
+}
+
+// New creates a new repository instance
+func New(d *data.Data) Interface {
+	return &repository{
+		d: d,
+	}
+}

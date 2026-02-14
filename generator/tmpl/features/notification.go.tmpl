@@ -1,0 +1,236 @@
+package features
+
+import (
+	"context"
+	"encoding/json"
+	"sync"
+	"time"
+)
+
+// NotificationType represents the type of notification
+type NotificationType string
+
+const (
+	NotificationInfo    NotificationType = "info"
+	NotificationSuccess NotificationType = "success"
+	NotificationWarning NotificationType = "warning"
+	NotificationError   NotificationType = "error"
+)
+
+// Notification represents a notification message
+type Notification struct {
+	ID        string           `json:"id"`
+	Type      NotificationType `json:"type"`
+	Title     string           `json:"title"`
+	Message   string           `json:"message"`
+	Data      interface{}      `json:"data,omitempty"`
+	UserID    string           `json:"user_id,omitempty"`
+	RoomID    string           `json:"room_id,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+	Read      bool             `json:"read"`
+}
+
+// NotificationService handles notification operations
+type NotificationService struct {
+	hub          *WSHub
+	storage      NotificationStorage
+	mu           sync.RWMutex
+	subscribers  map[string][]chan *Notification
+}
+
+// NotificationStorage defines notification persistence interface
+type NotificationStorage interface {
+	Save(ctx context.Context, notification *Notification) error
+	Get(ctx context.Context, id string) (*Notification, error)
+	GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*Notification, error)
+	MarkAsRead(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string) error
+}
+
+// NewNotificationService creates a new notification service
+func NewNotificationService(hub *WSHub, storage NotificationStorage) *NotificationService {
+	return &NotificationService{
+		hub:         hub,
+		storage:     storage,
+		subscribers: make(map[string][]chan *Notification),
+	}
+}
+
+// Send sends a notification
+func (ns *NotificationService) Send(ctx context.Context, notification *Notification) error {
+	// Set timestamp
+	if notification.CreatedAt.IsZero() {
+		notification.CreatedAt = time.Now()
+	}
+
+	// Generate ID if not set
+	if notification.ID == "" {
+		notification.ID = generateNotificationID()
+	}
+
+	// Save to storage if available
+	if ns.storage != nil {
+		if err := ns.storage.Save(ctx, notification); err != nil {
+			return err
+		}
+	}
+
+	// Send via WebSocket if hub is available
+	if ns.hub != nil {
+		data, err := json.Marshal(notification)
+		if err != nil {
+			return err
+		}
+
+		// Send to specific user
+		if notification.UserID != "" {
+			ns.sendToUser(notification.UserID, data)
+		}
+
+		// Send to room
+		if notification.RoomID != "" {
+			ns.hub.BroadcastToRoom(notification.RoomID, data, nil)
+		}
+	}
+
+	// Notify subscribers
+	ns.notifySubscribers(notification)
+
+	return nil
+}
+
+// SendToUser sends a notification to a specific user
+func (ns *NotificationService) SendToUser(ctx context.Context, userID string, notificationType NotificationType, title, message string, data interface{}) error {
+	notification := &Notification{
+		Type:    notificationType,
+		Title:   title,
+		Message: message,
+		Data:    data,
+		UserID:  userID,
+	}
+
+	return ns.Send(ctx, notification)
+}
+
+// SendToRoom sends a notification to a room
+func (ns *NotificationService) SendToRoom(ctx context.Context, roomID string, notificationType NotificationType, title, message string, data interface{}) error {
+	notification := &Notification{
+		Type:    notificationType,
+		Title:   title,
+		Message: message,
+		Data:    data,
+		RoomID:  roomID,
+	}
+
+	return ns.Send(ctx, notification)
+}
+
+// Broadcast sends a notification to all connected clients
+func (ns *NotificationService) Broadcast(ctx context.Context, notificationType NotificationType, title, message string, data interface{}) error {
+	notification := &Notification{
+		Type:    notificationType,
+		Title:   title,
+		Message: message,
+		Data:    data,
+	}
+
+	if ns.hub != nil {
+		msgData, err := json.Marshal(notification)
+		if err != nil {
+			return err
+		}
+		ns.hub.BroadcastToAll(msgData, nil)
+	}
+
+	ns.notifySubscribers(notification)
+
+	return nil
+}
+
+// Subscribe subscribes to notifications for a user
+func (ns *NotificationService) Subscribe(userID string) <-chan *Notification {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+
+	ch := make(chan *Notification, 100)
+	ns.subscribers[userID] = append(ns.subscribers[userID], ch)
+
+	return ch
+}
+
+// Unsubscribe unsubscribes from notifications
+func (ns *NotificationService) Unsubscribe(userID string, ch <-chan *Notification) {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+
+	if subs, ok := ns.subscribers[userID]; ok {
+		for i, sub := range subs {
+			if sub == ch {
+				ns.subscribers[userID] = append(subs[:i], subs[i+1:]...)
+				close(sub)
+				break
+			}
+		}
+
+		if len(ns.subscribers[userID]) == 0 {
+			delete(ns.subscribers, userID)
+		}
+	}
+}
+
+// GetUserNotifications retrieves notifications for a user
+func (ns *NotificationService) GetUserNotifications(ctx context.Context, userID string, limit, offset int) ([]*Notification, error) {
+	if ns.storage == nil {
+		return nil, fmt.Errorf("notification storage not configured")
+	}
+
+	return ns.storage.GetByUserID(ctx, userID, limit, offset)
+}
+
+// MarkAsRead marks a notification as read
+func (ns *NotificationService) MarkAsRead(ctx context.Context, id string) error {
+	if ns.storage == nil {
+		return fmt.Errorf("notification storage not configured")
+	}
+
+	return ns.storage.MarkAsRead(ctx, id)
+}
+
+// sendToUser sends data to a specific user via WebSocket
+func (ns *NotificationService) sendToUser(userID string, data []byte) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+
+	// Find all clients for this user and send message
+	for client := range ns.hub.clients {
+		if client.UserID == userID {
+			select {
+			case client.Send <- data:
+			default:
+				// Client send buffer is full
+			}
+		}
+	}
+}
+
+// notifySubscribers notifies all subscribers
+func (ns *NotificationService) notifySubscribers(notification *Notification) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+
+	if notification.UserID != "" {
+		if subs, ok := ns.subscribers[notification.UserID]; ok {
+			for _, ch := range subs {
+				select {
+				case ch <- notification:
+				default:
+					// Subscriber channel is full
+				}
+			}
+		}
+	}
+}
+
+func generateNotificationID() string {
+	return fmt.Sprintf("notif_%d", time.Now().UnixNano())
+}
