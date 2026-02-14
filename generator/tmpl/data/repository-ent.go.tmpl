@@ -1,0 +1,25 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+
+	"{{ .PackagePath }}/data/model"
+)
+
+// FindExample finds an example by ID using Ent
+func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
+	// Access database via r.d.EC (master) or r.d.ECRead (read replica)
+
+	// Example implementation:
+	// client := r.d.GetEntClientWithFallback(ctx, true)
+	// result, err := client.User.Get(ctx, id)
+	// if err != nil {
+	//     return nil, err
+	// }
+
+	// Example implementation would go here
+	_ = id
+
+	return nil, fmt.Errorf("not implemented")
+}

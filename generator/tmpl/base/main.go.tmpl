@@ -1,0 +1,167 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"{{ .PackagePath }}/internal/server"
+	"{{ .PackagePath }}/internal/version"
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/logging/logger"
+{{- if .DBDriver }}
+	{{ driverImport .DBDriver }}
+{{- end }}
+{{- if .UseRedis }}
+	{{ conditionalImport .UseRedis "github.com/ncobase/ncore/data/redis" }}
+{{- end }}
+{{- if .UseElastic }}
+	{{ conditionalImport .UseElastic "github.com/ncobase/ncore/data/elasticsearch" }}
+{{- end }}
+{{- if .UseOpenSearch }}
+	{{ conditionalImport .UseOpenSearch "github.com/ncobase/ncore/data/opensearch" }}
+{{- end }}
+{{- if .UseMeili }}
+	{{ conditionalImport .UseMeili "github.com/ncobase/ncore/data/meilisearch" }}
+{{- end }}
+{{- if .UseKafka }}
+	{{ conditionalImport .UseKafka "github.com/ncobase/ncore/data/kafka" }}
+{{- end }}
+{{- if .UseRabbitMQ }}
+	{{ conditionalImport .UseRabbitMQ "github.com/ncobase/ncore/data/rabbitmq" }}
+{{- end }}
+)
+
+const (
+	shutdownTimeout = 5 * time.Second // service shutdown timeout
+)
+
+func main() {
+	flag.Parse()
+
+	// Handle version flags
+	version.Flags()
+
+	// Load config
+	conf := loadConfig()
+
+	// Set logger version
+	logger.SetVersion(version.GetVersionInfo().Version)
+
+	// Initialize logger
+	cleanupLogger := initializeLogger(conf)
+	defer cleanupLogger()
+
+	logger.Infof(context.Background(), "Starting %s", conf.AppName)
+
+	if err := runServer(conf); err != nil {
+		logger.Fatalf(context.Background(), "Server error: %v", err)
+	}
+}
+
+// runServer creates and runs HTTP server
+func runServer(conf *config.Config) error {
+	// Create server
+	s, err := server.New(conf)
+	if err != nil {
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+	defer s.Cleanup()
+
+	// Create listener
+	listener, err := createListener(conf)
+	if err != nil {
+		return fmt.Errorf("failed to create listener: %w", err)
+	}
+	defer listener.Close()
+
+	// Create HTTP server instance
+	srv := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", conf.Host, conf.Port),
+		Handler:      s.Handler(),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		logger.Infof(context.Background(), "Listening and serving HTTP on: %s", srv.Addr)
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errChan <- fmt.Errorf("server error: %w", err)
+		}
+	}()
+
+	return gracefulShutdown(srv, errChan)
+}
+
+// createListener creates network listener
+func createListener(conf *config.Config) (net.Listener, error) {
+	addr := fmt.Sprintf("%s:%d", conf.Host, conf.Port)
+	if conf.Port == 0 {
+		addr = fmt.Sprintf("%s:0", conf.Host)
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create listener: %w", err)
+	}
+
+	// Update port if dynamically allocated
+	if conf.Port == 0 {
+		conf.Port = listener.Addr().(*net.TCPAddr).Port
+		logger.Infof(context.Background(), "Using dynamically allocated port: %d", conf.Port)
+	}
+
+	return listener, nil
+}
+
+// loadConfig loads the application configuration
+func loadConfig() *config.Config {
+	conf, err := config.Init()
+	if err != nil {
+		logger.Fatalf(context.Background(), "Failed to load config: %+v", err)
+	}
+	return conf
+}
+
+// initializeLogger initializes the logger
+func initializeLogger(conf *config.Config) func() {
+	cleanup, err := logger.New(conf.Logger)
+	if err != nil {
+		logger.Fatalf(context.Background(), "Failed to initialize logger: %+v", err)
+	}
+	return cleanup
+}
+
+// gracefulShutdown gracefully shuts down the server
+func gracefulShutdown(srv *http.Server, errChan chan error) error {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-errChan:
+		return err
+
+	case sig := <-quit:
+		logger.Infof(context.Background(), "Received signal: %s, shutting down gracefully...", sig)
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			return fmt.Errorf("server forced to shutdown: %w", err)
+		}
+
+		logger.Info(context.Background(), "Server shutdown completed")
+		return nil
+	}
+}

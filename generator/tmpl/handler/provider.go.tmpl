@@ -1,0 +1,26 @@
+package handler
+
+import (
+	"github.com/gin-gonic/gin"
+	"{{ .PackagePath }}/service"
+)
+
+// Interface defines the handler interface
+type Interface interface {
+	// Example endpoint
+	GetExample(c *gin.Context)
+
+	// Add your handler methods here
+}
+
+// handler implements the Interface
+type handler struct {
+	svc service.Interface
+}
+
+// New creates a new handler instance
+func New(svc service.Interface) Interface {
+	return &handler{
+		svc: svc,
+	}
+}

@@ -1,0 +1,122 @@
+package features
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
+
+// PaginationRequest represents pagination parameters
+type PaginationRequest struct {
+	Page     int    `form:"page" json:"page"`
+	PageSize int    `form:"page_size" json:"page_size"`
+	Cursor   string `form:"cursor" json:"cursor"`
+}
+
+// PaginationResponse represents paginated response
+type PaginationResponse struct {
+	Data       interface{} `json:"data"`
+	Pagination *Pagination `json:"pagination"`
+}
+
+// Pagination holds pagination metadata
+type Pagination struct {
+	Page       int    `json:"page,omitempty"`
+	PageSize   int    `json:"page_size"`
+	Total      int64  `json:"total,omitempty"`
+	TotalPages int    `json:"total_pages,omitempty"`
+	HasMore    bool   `json:"has_more"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	PrevCursor string `json:"prev_cursor,omitempty"`
+}
+
+// CursorInfo holds cursor pagination information
+type CursorInfo struct {
+	ID        string `json:"id"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+// ParsePaginationRequest extracts pagination parameters from request
+func ParsePaginationRequest(c *gin.Context) *PaginationRequest {
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	cursor := c.Query("cursor")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	if page < 1 {
+		page = 1
+	}
+
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	return &PaginationRequest{
+		Page:     page,
+		PageSize: pageSize,
+		Cursor:   cursor,
+	}
+}
+
+// ParseCursor decodes cursor string to CursorInfo
+func ParseCursor(cursor string) (*CursorInfo, error) {
+	if cursor == "" {
+		return nil, nil
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(cursor)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor format")
+	}
+
+	var info CursorInfo
+	if err := json.Unmarshal(decoded, &info); err != nil {
+		return nil, fmt.Errorf("invalid cursor data")
+	}
+
+	return &info, nil
+}
+
+// EncodeCursor encodes CursorInfo to cursor string
+func EncodeCursor(info *CursorInfo) string {
+	if info == nil {
+		return ""
+	}
+
+	data, _ := json.Marshal(info)
+	return base64.URLEncoding.EncodeToString(data)
+}
+
+// NewOffsetPaginationResponse creates offset-based pagination response
+func NewOffsetPaginationResponse(data interface{}, page, pageSize int, total int64) *PaginationResponse {
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+
+	return &PaginationResponse{
+		Data: data,
+		Pagination: &Pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+			HasMore:    page < totalPages,
+		},
+	}
+}
+
+// NewCursorPaginationResponse creates cursor-based pagination response
+func NewCursorPaginationResponse(data interface{}, nextCursor, prevCursor string, hasMore bool, pageSize int) *PaginationResponse {
+	return &PaginationResponse{
+		Data: data,
+		Pagination: &Pagination{
+			PageSize:   pageSize,
+			HasMore:    hasMore,
+			NextCursor: nextCursor,
+			PrevCursor: prevCursor,
+		},
+	}
+}

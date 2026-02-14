@@ -1,0 +1,236 @@
+// +build integration
+
+package integration_test
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"{{ .PackagePath }}/data"
+	"{{ .PackagePath }}/data/repository"
+	"{{ .PackagePath }}/service"
+	"github.com/ncobase/ncore/config"
+)
+
+// IntegrationTestSuite is the integration test suite
+type IntegrationTestSuite struct {
+	suite.Suite
+	ctx     context.Context
+	config  *config.Config
+	data    *data.Data
+	cleanup func(name ...string)
+	repo    repository.Interface
+	svc     service.Interface
+}
+
+// SetupSuite runs before all tests
+func (s *IntegrationTestSuite) SetupSuite() {
+	s.ctx = context.Background()
+
+	// Load test configuration
+	conf, err := config.Init()
+	require.NoError(s.T(), err)
+	s.config = conf
+
+	// Initialize data layer
+	d, cleanup, err := data.New(conf.Data, "test")
+	require.NoError(s.T(), err)
+	s.data = d
+	s.cleanup = cleanup
+
+	// Initialize layers
+	s.repo = repository.New(d)
+	s.svc = service.New(s.repo)
+}
+
+// TearDownSuite runs after all tests
+func (s *IntegrationTestSuite) TearDownSuite() {
+	if s.svc != nil {
+		s.svc.Close()
+	}
+	if s.cleanup != nil {
+		s.cleanup()
+	}
+}
+
+// SetupTest runs before each test
+func (s *IntegrationTestSuite) SetupTest() {
+	// Clean up test data before each test
+	s.cleanupTestData()
+}
+
+// TearDownTest runs after each test
+func (s *IntegrationTestSuite) TearDownTest() {
+	// Clean up test data after each test
+	s.cleanupTestData()
+}
+
+func (s *IntegrationTestSuite) cleanupTestData() {
+	// Delete test data
+	// Example for Ent:
+	// s.data.EC.User.Delete().Where(user.NameHasPrefix("test_")).ExecX(s.ctx)
+}
+
+func (s *IntegrationTestSuite) TestFullCRUDWorkflow() {
+	t := s.T()
+
+	// Create
+	// createReq := &structs.CreateRequest{
+	//     Name: "test_integration_item",
+	// }
+	// created, err := s.svc.Create(s.ctx, createReq)
+	// require.NoError(t, err)
+	// assert.NotNil(t, created)
+	// assert.NotEmpty(t, created.ID)
+
+	// Read
+	// read, err := s.svc.GetByID(s.ctx, created.ID)
+	// require.NoError(t, err)
+	// assert.Equal(t, created.ID, read.ID)
+	// assert.Equal(t, createReq.Name, read.Name)
+
+	// Update
+	// updateReq := &structs.UpdateRequest{
+	//     ID:   created.ID,
+	//     Name: "test_integration_item_updated",
+	// }
+	// updated, err := s.svc.Update(s.ctx, updateReq)
+	// require.NoError(t, err)
+	// assert.Equal(t, updateReq.Name, updated.Name)
+
+	// List
+	// listReq := &structs.ListRequest{
+	//     Page:     1,
+	//     PageSize: 10,
+	// }
+	// list, err := s.svc.List(s.ctx, listReq)
+	// require.NoError(t, err)
+	// assert.NotEmpty(t, list.Items)
+
+	// Delete
+	// err = s.svc.Delete(s.ctx, created.ID)
+	// require.NoError(t, err)
+
+	// Verify deletion
+	// _, err = s.svc.GetByID(s.ctx, created.ID)
+	// assert.Error(t, err)
+}
+
+func (s *IntegrationTestSuite) TestDatabaseTransactions() {
+	t := s.T()
+
+	t.Run("successful transaction", func(t *testing.T) {
+		// Test transaction commit
+		// err := s.svc.TransactionalOperation(s.ctx)
+		// require.NoError(t, err)
+	})
+
+	t.Run("transaction rollback", func(t *testing.T) {
+		// Test transaction rollback
+		// This should not persist any data
+	})
+}
+
+func (s *IntegrationTestSuite) TestConcurrentOperations() {
+	t := s.T()
+
+	t.Run("concurrent creates", func(t *testing.T) {
+		// Test concurrent create operations
+	})
+
+	t.Run("concurrent updates", func(t *testing.T) {
+		// Test concurrent update operations
+		// Verify optimistic locking or proper conflict handling
+	})
+}
+
+func (s *IntegrationTestSuite) TestCaching() {
+	t := s.T()
+
+	t.Run("cache hit", func(t *testing.T) {
+		// Create item
+		// Get item (should cache)
+		// Get item again (should hit cache)
+	})
+
+	t.Run("cache invalidation", func(t *testing.T) {
+		// Create item
+		// Get item (cache)
+		// Update item (should invalidate cache)
+		// Get item (should fetch from DB)
+	})
+}
+
+func (s *IntegrationTestSuite) TestPaginationAndFiltering() {
+	t := s.T()
+
+	// Create test data
+	// for i := 0; i < 25; i++ {
+	//     s.svc.Create(s.ctx, &structs.CreateRequest{
+	//         Name: fmt.Sprintf("test_item_%02d", i),
+	//     })
+	// }
+
+	t.Run("offset pagination", func(t *testing.T) {
+		// page1, err := s.svc.List(s.ctx, &structs.ListRequest{
+		//     Page:     1,
+		//     PageSize: 10,
+		// })
+		// require.NoError(t, err)
+		// assert.Len(t, page1.Items, 10)
+
+		// page2, err := s.svc.List(s.ctx, &structs.ListRequest{
+		//     Page:     2,
+		//     PageSize: 10,
+		// })
+		// require.NoError(t, err)
+		// assert.Len(t, page2.Items, 10)
+	})
+
+	t.Run("cursor pagination", func(t *testing.T) {
+		// Test cursor-based pagination
+	})
+
+	t.Run("filtering", func(t *testing.T) {
+		// Test various filter operators
+	})
+
+	t.Run("sorting", func(t *testing.T) {
+		// Test sorting by different fields
+	})
+}
+
+func (s *IntegrationTestSuite) TestDataConsistency() {
+	t := s.T()
+
+	t.Run("referential integrity", func(t *testing.T) {
+		// Test foreign key constraints
+	})
+
+	t.Run("unique constraints", func(t *testing.T) {
+		// Test unique index enforcement
+	})
+
+	t.Run("data validation", func(t *testing.T) {
+		// Test database-level validations
+	})
+}
+
+// TestIntegrationSuite runs the integration test suite
+func TestIntegrationSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
+
+	// Check for test database configuration
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL not set, skipping integration tests")
+	}
+
+	suite.Run(t, new(IntegrationTestSuite))
+}

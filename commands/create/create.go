@@ -20,9 +20,23 @@ func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create [extension type or custom directory] name",
 		Aliases: []string{"gen", "generate"},
-		Short:   "Generate new extension components",
-		Long:    `Generate new extensions (core, business, plugin, or custom directory).`,
-		Args:    cobra.RangeArgs(1, 2),
+		Short:   "Create new extension components",
+		Long: `Create new extensions within an existing ncobase project.
+
+Extension types:
+  core      - Core domain extensions (fundamental business logic)
+  business  - Business domain extensions (application-specific logic)
+  plugin    - Plugin extensions (optional features)
+  [custom]  - Custom directory name
+
+Examples:
+  nco create core auth          # Create core/auth extension
+  nco create business crm       # Create business/crm extension
+  nco create plugin payment     # Create plugin/payment extension
+  nco create myext user         # Create myext/user in custom directory
+
+For creating standalone applications, use 'nco init' instead.`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := generator.DefaultOptions()
 
@@ -52,7 +66,6 @@ func NewCommand() *cobra.Command {
 				opts.WithTest, _ = cmd.Flags().GetBool("with-test")
 				opts.Group, _ = cmd.Flags().GetString("group")
 				opts.WithCmd, _ = cmd.Flags().GetBool("with-cmd")
-				opts.Standalone, _ = cmd.Flags().GetBool("standalone")
 
 				return generator.Generate(opts)
 			}
@@ -87,7 +100,6 @@ func NewCommand() *cobra.Command {
 			opts.UseGorm, _ = cmd.Flags().GetBool("use-gorm")
 			opts.WithCmd, _ = cmd.Flags().GetBool("with-cmd")
 			opts.WithTest, _ = cmd.Flags().GetBool("with-test")
-			opts.Standalone, _ = cmd.Flags().GetBool("standalone")
 			opts.Group, _ = cmd.Flags().GetString("group")
 
 			return generator.Generate(opts)
@@ -106,11 +118,10 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringP("module", "m", "", "Go module name (defaults to current module)")
 	cmd.Flags().Bool("use-mongo", false, "use MongoDB")
 	cmd.Flags().Bool("use-ent", false, "use Ent as ORM")
-	cmd.Flags().Bool("use-gorm", false, "use Gorm as ORM")
+	cmd.Flags().Bool("use-gorm", false, "use GORM as ORM")
 	cmd.Flags().Bool("with-test", false, "generate test files")
-	cmd.Flags().Bool("with-cmd", false, "generate cmd directory with main.go")
-	cmd.Flags().Bool("standalone", false, "generate as standalone app without extension structure")
-	cmd.Flags().String("group", "", "belongs domain group (optional)")
+	cmd.Flags().Bool("with-cmd", false, "generate cmd directory with main.go for testing")
+	cmd.Flags().String("group", "", "optional domain group name")
 
 	return cmd
 }

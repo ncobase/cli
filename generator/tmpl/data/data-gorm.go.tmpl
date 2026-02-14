@@ -1,0 +1,219 @@
+package data
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/data"
+	"github.com/ncobase/ncore/logging/logger"
+{{- if .DBDriver }}
+	_ "github.com/ncobase/ncore/data/{{ .DBDriver }}"
+{{- end }}
+{{- if .UseRedis }}
+	_ "github.com/ncobase/ncore/data/redis"
+{{- end }}
+{{- if .UseElastic }}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
+{{- end }}
+{{- if .UseOpenSearch }}
+	_ "github.com/ncobase/ncore/data/opensearch"
+{{- end }}
+{{- if .UseMeili }}
+	_ "github.com/ncobase/ncore/data/meilisearch"
+{{- end }}
+{{- if .UseKafka }}
+	_ "github.com/ncobase/ncore/data/kafka"
+{{- end }}
+{{- if .UseRabbitMQ }}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+{{- end }}
+{{- if .UseS3Storage }}
+	_ "github.com/ncobase/ncore/data/s3"
+{{- end }}
+{{- if .UseMinio }}
+	_ "github.com/ncobase/ncore/data/minio"
+{{- end }}
+{{- if .UseAliyun }}
+	_ "github.com/ncobase/ncore/data/aliyun"
+{{- end }}
+
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/driver/sqlserver"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+)
+
+// Data represents the data layer
+type Data struct {
+	*data.Data
+	GormClient *gorm.DB // master GORM client
+	GormRead   *gorm.DB // slave GORM client for read operations
+}
+
+// New creates a new data layer instance
+func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
+	d, cleanup, err := data.New(conf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx := context.Background()
+
+	// get master connection
+	masterDB := d.GetMasterDB()
+	if masterDB == nil {
+		return nil, cleanup, fmt.Errorf("master database connection is nil")
+	}
+
+	// create master GORM client
+	gormClient, err := newGormClient(masterDB, conf.Database.Master, env...)
+	if err != nil {
+		return nil, cleanup, fmt.Errorf("failed to create master GORM client: %v", err)
+	}
+
+	// get read connection
+	var gormClientRead *gorm.DB
+	if readDB, err := d.GetSlaveDB(); err == nil && readDB != nil {
+		if readDB != masterDB {
+			gormClientRead, err = newGormClient(readDB, conf.Database.Master, env...)
+			if err != nil {
+				logger.Warnf(ctx, "Failed to create read-only GORM client, will use master for reads: %v", err)
+				gormClientRead = gormClient // fallback to master
+			}
+		} else {
+			// Read DB is the same as master (no slaves available)
+			gormClientRead = gormClient
+		}
+	} else {
+		// Failed to get read DB, use master
+		gormClientRead = gormClient
+	}
+
+	return &Data{
+		Data:       d,
+		GormClient: gormClient,
+		GormRead:   gormClientRead,
+	}, cleanup, nil
+}
+
+// newGormClient creates a new GORM client
+func newGormClient(db *sql.DB, conf *config.DBNode, env ...string) (*gorm.DB, error) {
+	var dialector gorm.Dialector
+
+	switch conf.Driver {
+	case "postgres", "postgresql":
+		dialector = postgres.New(postgres.Config{
+			Conn: db,
+		})
+	case "mysql":
+		dialector = mysql.New(mysql.Config{
+			Conn: db,
+		})
+	case "sqlite", "sqlite3":
+		dialector = sqlite.Open(conf.Source)
+	case "sqlserver", "mssql":
+		dialector = sqlserver.New(sqlserver.Config{
+			Conn: db,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", conf.Driver)
+	}
+
+	// Configure logger
+	logConfig := gormlogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		Colorful:                  false,
+		IgnoreRecordNotFoundError: true,
+		LogLevel:                  gormlogger.Silent,
+	}
+
+	if conf.Logging {
+		logConfig.LogLevel = gormlogger.Info
+	}
+
+	// Create GORM client
+	client, err := gorm.Open(dialector, &gorm.Config{
+		Logger: gormlogger.Default.LogMode(logConfig.LogLevel),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GORM client: %v", err)
+	}
+
+	// Auto migrate
+	if conf.Migrate {
+		// Add your models here for auto-migration
+		// if err := client.AutoMigrate(&YourModel{}); err != nil {
+		//     return nil, fmt.Errorf("failed to migrate schema: %v", err)
+		// }
+	}
+
+	return client, nil
+}
+
+// GetMasterGormClient returns the master GORM client
+func (d *Data) GetMasterGormClient() *gorm.DB {
+	return d.GormClient
+}
+
+// GetSlaveGormClient returns the slave GORM client
+func (d *Data) GetSlaveGormClient() *gorm.DB {
+	if d.GormRead != nil {
+		return d.GormRead
+	}
+	return d.GormClient // Fallback to master
+}
+
+// GetGormClientWithFallback returns the appropriate GORM client based on operation type
+func (d *Data) GetGormClientWithFallback(ctx context.Context, readOnly ...bool) *gorm.DB {
+	isReadOnly := false
+	if len(readOnly) > 0 {
+		isReadOnly = readOnly[0]
+	}
+
+	if !isReadOnly {
+		// For write operations, always use master
+		return d.GetMasterGormClient()
+	}
+
+	// For read operations, try read client first
+	if d.GormRead != nil && d.GormRead != d.GormClient {
+		return d.GormRead
+	}
+
+	// Check if system is in read-only mode
+	if d.IsReadOnlyMode(ctx) {
+		logger.Warnf(ctx, "System is in read-only mode, using available read connection")
+	}
+
+	// Fallback to master
+	return d.GormClient
+}
+
+// Close closes all the resources in Data
+func (d *Data) Close() (errs []error) {
+	// GORM DB instances don't need explicit Close() as they use the underlying sql.DB
+	// The sql.DB will be closed by the base Data layer
+
+	if baseErrs := d.Data.Close(); len(baseErrs) > 0 {
+		errs = append(errs, baseErrs...)
+	}
+
+	return errs
+}
+
+// WithGormTx wraps a function within a GORM transaction
+func (d *Data) WithGormTx(ctx context.Context, fn func(ctx context.Context, tx *gorm.DB) error) error {
+	client := d.GetGormClientWithFallback(ctx)
+	if client == nil {
+		return fmt.Errorf("GORM client is nil")
+	}
+
+	return client.Transaction(func(tx *gorm.DB) error {
+		return fn(ctx, tx)
+	})
+}

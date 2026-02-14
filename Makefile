@@ -2,7 +2,7 @@
 
 BINARY_NAME=nco
 BUILD_DIR=bin
-VERSION=$(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+VERSION=$(shell git describe --tags --match "v*" --always 2>/dev/null || echo "unknown")
 REVISION=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILT_AT=$(shell date -u '+%Y-%m-%dT%H:%M:%S')
 

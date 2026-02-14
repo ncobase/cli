@@ -1,0 +1,192 @@
+package middleware
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/ecode"
+	"github.com/ncobase/ncore/net/resp"
+	"github.com/ncobase/ncore/security/jwt"
+)
+
+// AuthConfig holds authentication middleware configuration
+type AuthConfig struct {
+	JWTSecret     string
+	SkipPaths     []string
+	TokenLookup   string // "header:Authorization" or "cookie:token"
+	TokenHeadName string // "Bearer"
+}
+
+// JWTAuth provides JWT authentication middleware
+func JWTAuth(conf *config.Config) gin.HandlerFunc {
+	authConf := &AuthConfig{
+		JWTSecret:     conf.Security.JWT.Secret,
+		TokenLookup:   "header:Authorization",
+		TokenHeadName: "Bearer",
+		SkipPaths: []string{
+			"/health",
+			"/version",
+			"/api/v1/auth/login",
+			"/api/v1/auth/register",
+		},
+	}
+
+	return func(c *gin.Context) {
+		// Skip authentication for certain paths
+		for _, path := range authConf.SkipPaths {
+			if matchPath(c.Request.URL.Path, path) {
+				c.Next()
+				return
+			}
+		}
+
+		// Extract token from request
+		token := extractToken(c, authConf)
+		if token == "" {
+			resp.Fail(c.Writer, resp.Unauthorized(ecode.Text(http.StatusUnauthorized)))
+			c.Abort()
+			return
+		}
+
+		// Parse and validate token
+		claims, err := jwt.ParseToken(token, authConf.JWTSecret)
+		if err != nil {
+			resp.Fail(c.Writer, resp.Unauthorized("Invalid or expired token"))
+			c.Abort()
+			return
+		}
+
+		// Set user information in context
+		c.Set("user_id", claims.UserID)
+		c.Set("username", claims.Username)
+		c.Set("roles", claims.Roles)
+
+		c.Next()
+	}
+}
+
+// extractToken extracts JWT token from request
+func extractToken(c *gin.Context, conf *AuthConfig) string {
+	parts := strings.Split(conf.TokenLookup, ":")
+	if len(parts) != 2 {
+		return ""
+	}
+
+	switch parts[0] {
+	case "header":
+		authHeader := c.GetHeader(parts[1])
+		if authHeader == "" {
+			return ""
+		}
+
+		// Extract token from "Bearer <token>" format
+		if conf.TokenHeadName != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == conf.TokenHeadName {
+				return parts[1]
+			}
+			return ""
+		}
+
+		return authHeader
+
+	case "cookie":
+		token, err := c.Cookie(parts[1])
+		if err != nil {
+			return ""
+		}
+		return token
+
+	case "query":
+		return c.Query(parts[1])
+
+	default:
+		return ""
+	}
+}
+
+// matchPath checks if request path matches pattern
+func matchPath(path, pattern string) bool {
+	if pattern == path {
+		return true
+	}
+
+	// Simple wildcard matching
+	if strings.HasSuffix(pattern, "*") {
+		prefix := strings.TrimSuffix(pattern, "*")
+		return strings.HasPrefix(path, prefix)
+	}
+
+	return false
+}
+
+// RequireRoles middleware checks if user has required roles
+func RequireRoles(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userRoles, exists := c.Get("roles")
+		if !exists {
+			resp.Fail(c.Writer, resp.Forbidden("No roles found"))
+			c.Abort()
+			return
+		}
+
+		userRolesList, ok := userRoles.([]string)
+		if !ok {
+			resp.Fail(c.Writer, resp.Forbidden("Invalid roles format"))
+			c.Abort()
+			return
+		}
+
+		// Check if user has any of the required roles
+		for _, requiredRole := range roles {
+			for _, userRole := range userRolesList {
+				if userRole == requiredRole {
+					c.Next()
+					return
+				}
+			}
+		}
+
+		resp.Fail(c.Writer, resp.Forbidden("Insufficient permissions"))
+		c.Abort()
+	}
+}
+
+// RequirePermissions middleware checks if user has required permissions
+func RequirePermissions(permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userPerms, exists := c.Get("permissions")
+		if !exists {
+			resp.Fail(c.Writer, resp.Forbidden("No permissions found"))
+			c.Abort()
+			return
+		}
+
+		userPermsList, ok := userPerms.([]string)
+		if !ok {
+			resp.Fail(c.Writer, resp.Forbidden("Invalid permissions format"))
+			c.Abort()
+			return
+		}
+
+		// Check if user has all required permissions
+		for _, requiredPerm := range permissions {
+			found := false
+			for _, userPerm := range userPermsList {
+				if userPerm == requiredPerm {
+					found = true
+					break
+				}
+			}
+			if !found {
+				resp.Fail(c.Writer, resp.Forbidden("Insufficient permissions"))
+				c.Abort()
+				return
+			}
+		}
+
+		c.Next()
+	}
+}

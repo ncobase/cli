@@ -1,0 +1,48 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/config"
+
+	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/internal/version"
+)
+
+// registerRest registers the REST routes
+func registerRest(e *gin.Engine, conf *config.Config, h handler.Interface) {
+	// Root endpoint
+	e.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Service is running",
+			"name":    conf.AppName,
+			"version": version.GetVersionInfo().Version,
+		})
+	})
+
+	// Health check endpoint
+	e.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "healthy",
+			"name":    conf.AppName,
+			"version": version.GetVersionInfo().Version,
+		})
+	})
+
+	// Version endpoint
+	e.GET("/version", func(c *gin.Context) {
+		c.JSON(http.StatusOK, version.GetVersionInfo())
+	})
+
+	// API v1 routes
+	v1 := e.Group("/api/v1")
+	{
+		// Example endpoint
+		v1.GET("/example", h.GetExample)
+
+		// Add your API routes here
+		// v1.GET("/users", h.GetUsers)
+		// v1.POST("/users", h.CreateUser)
+	}
+}

@@ -1,0 +1,130 @@
+# {{ .Name }}
+
+{{ .Name }} - A service built with ncobase/ncore
+
+## Features
+
+- Clean architecture (Handler -> Service -> Repository)
+- {{- if .UseEnt }}
+- Ent ORM for database access
+{{- else if .UseGorm }}
+- GORM for database access
+{{- end }}
+- Configuration management
+- Structured logging
+- Health check endpoints
+- Version information
+
+## Prerequisites
+
+- Go 1.25.5 or higher
+{{- if .UseEnt }}
+- Database (PostgreSQL/MySQL/SQLite)
+{{- end }}
+
+## Getting Started
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd {{ .Name }}
+
+# Install dependencies
+make deps
+```
+
+### Configuration
+
+Copy the example configuration file and update it with your settings:
+
+```bash
+cp configs/config.example.yaml configs/config.yaml
+```
+
+### Build
+
+```bash
+# Build the binary
+make build
+
+# Or run directly
+make dev
+```
+
+### Run
+
+```bash
+# Run the built binary
+./build/{{ .Name }}
+
+# Or use make
+make run
+```
+
+## Development
+
+### Available Commands
+
+```bash
+make help          # Show available commands
+make build         # Build the binary
+make dev           # Run in development mode
+make test          # Run tests
+make test-coverage # Run tests with coverage
+make lint          # Run linter
+make fmt           # Format code
+{{- if .UseEnt }}
+make ent-generate  # Generate Ent code
+{{- end }}
+make clean         # Clean build artifacts
+```
+
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Run with coverage
+make test-coverage
+```
+
+{{- if .UseEnt }}
+
+### Database Schema
+
+Generate Ent schema code:
+
+```bash
+make ent-generate
+```
+{{- end }}
+
+## API Endpoints
+
+- `GET /` - Root endpoint
+- `GET /health` - Health check
+- `GET /version` - Version information
+- `GET /api/v1/example` - Example endpoint
+
+## Project Structure
+
+```
+.
+├── cmd/{{ .Name }}/     # Application entry point
+├── configs/           # Configuration files
+├── data/              # Data layer (database, repositories)
+├── handler/           # HTTP handlers
+├── internal/          # Internal packages
+│   ├── config/        # Configuration helpers
+│   ├── server/        # Server setup
+│   └── version/       # Version information
+├── service/           # Business logic
+└── Makefile           # Build automation
+```
+
+## License
+
+Copyright © 2026

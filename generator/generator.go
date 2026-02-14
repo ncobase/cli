@@ -1,3 +1,21 @@
+// Package generator provides code generation capabilities for ncobase CLI.
+//
+// It supports two generation modes:
+//
+// 1. Standalone Application Mode (via 'nco init'):
+//   - Creates a complete, ready-to-run Go application
+//   - Generates full project structure: cmd/, data/, handler/, service/, etc.
+//   - Includes configuration files, Makefile, and documentation
+//   - Supports multiple databases, ORMs, and data sources
+//
+// 2. Extension Module Mode (via 'nco create'):
+//   - Creates extension modules within existing ncobase projects
+//   - Supports three extension types: core, business, plugin
+//   - Allows custom directory locations
+//   - Integrates with existing project structure
+//
+// The generator uses an embed.FS-based template system (see loader.go)
+// for efficient template management and rendering.
 package generator
 
 import (
@@ -11,30 +29,44 @@ import (
 	"github.com/ncobase/cli/utils"
 )
 
-// Options defines generation options
+// Options defines code generation options
 type Options struct {
-	Name          string
-	Type          string // core / business / plugin / custom
-	CustomDir     string // Custom Directory, if Type is custom
-	OutputPath    string // Generated code output path
-	ModuleName    string // Module name
-	UseMongo      bool
-	UseEnt        bool
-	UseGorm       bool
-	WithCmd       bool
-	WithTest      bool
-	Standalone    bool
-	Group         string
-	DBDriver      string // postgres, mysql, sqlite, mongodb
-	UseRedis      bool
-	UseElastic    bool
-	UseOpenSearch bool
-	UseMeili      bool
-	UseKafka      bool
-	UseRabbitMQ   bool
-	UseS3Storage  bool
-	UseMinio      bool
-	UseAliyun     bool
+	Name       string // Project or extension name
+	Type       string // Generation type: core, business, plugin, custom, or direct
+	CustomDir  string // Custom directory name (when Type is custom)
+	OutputPath string // Base output directory
+	ModuleName string // Go module name (e.g., github.com/username/project)
+
+	// ORM options (mutually exclusive)
+	UseMongo bool // Use MongoDB driver
+	UseEnt   bool // Use Ent ORM for SQL databases
+	UseGorm  bool // Use GORM for SQL databases
+
+	// Generation options
+	WithCmd  bool   // Generate cmd directory with main.go
+	WithTest bool   // Generate test files (unit, integration, e2e)
+	Group    string // Optional domain group name
+
+	// Standalone mode (set by init command)
+	Standalone bool // Generate as standalone application
+
+	// Database configuration
+	DBDriver string // Database driver: postgres, mysql, sqlite, mongodb, neo4j
+
+	// Data source drivers
+	UseRedis      bool // Include Redis driver for caching/queuing
+	UseElastic    bool // Include Elasticsearch driver for search
+	UseOpenSearch bool // Include OpenSearch driver for search
+	UseMeili      bool // Include Meilisearch driver for search
+
+	// Message queue drivers
+	UseKafka    bool // Include Kafka driver for messaging
+	UseRabbitMQ bool // Include RabbitMQ driver for messaging
+
+	// Storage drivers
+	UseS3Storage bool // Include AWS S3 storage driver
+	UseMinio     bool // Include MinIO storage driver
+	UseAliyun    bool // Include Aliyun OSS storage driver
 }
 
 // DefaultOptions returns default options
@@ -63,11 +95,12 @@ func DefaultOptions() *Options {
 	}
 }
 
+// extDescriptions maps extension types to human-readable descriptions
 var extDescriptions = map[string]string{
-	"core":     "Core Domain",
-	"business": "Business Domain",
-	"plugin":   "Plugin Domain",
-	"custom":   "Custom Directory",
+	"core":     "Core Domain",      // Fundamental business logic
+	"business": "Business Domain",  // Application-specific logic
+	"plugin":   "Plugin Domain",    // Optional features
+	"custom":   "Custom Directory", // User-defined location
 }
 
 // Generate generates code
@@ -423,9 +456,18 @@ func createStructure(basePath string, data *templates.Data, mainTemplate func(st
 
 // createStandaloneStructure creates the structure for a standalone application
 func createStandaloneStructure(basePath string, data *templates.Data) error {
+	// Initialize template registry
+	registry, err := NewRegistry()
+	if err != nil {
+		return fmt.Errorf("failed to initialize template registry: %w", err)
+	}
+
+	// Create template data
+	tmplData := NewTemplateData(data)
+
 	// Create essential directories
 	directories := []string{
-		"cmd",
+		fmt.Sprintf("cmd/%s", data.Name),
 		"internal/server",
 		"internal/middleware",
 		"internal/version",
@@ -435,6 +477,7 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		"data/model",
 		"data/repository",
 		"service",
+		"configs",
 	}
 
 	if data.UseEnt {
@@ -454,71 +497,153 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		}
 	}
 
-	// Select data template
-	selectDataTemplate := func(data templates.Data) string {
-		if data.UseEnt {
-			return templates.DataTemplateWithEnt(data.Name, data.ExtType)
-		}
-		if data.UseGorm {
-			return templates.DataTemplateWithGorm(data.Name, data.ExtType)
-		}
-		if data.UseMongo {
-			return templates.DataTemplateWithMongo(data.Name, data.ExtType)
-		}
-		return templates.DataTemplate(data.Name, data.ExtType)
-	}
-
-	// Create cmd files
-	cmdFiles := map[string]string{
-		"cmd/main.go": templates.CmdMainTemplate(data),
-	}
-
-	// Create internal files
-	internalFiles := map[string]string{
-		"internal/server/server.go": templates.StandaloneServerTemplate(data.Name, data.ModuleName),
-		"internal/server/http.go":   templates.StandaloneGinTemplate(data.Name, data.ModuleName),
-		"internal/server/rest.go":   templates.StandaloneRestTemplate(data.Name, data.ModuleName),
-
-		"internal/middleware/cors.go":             templates.MiddlewareCORSTemplate(),
-		"internal/middleware/security_headers.go": templates.MiddlewareSecurityHeadersTemplate(),
-		"internal/middleware/trace.go":            templates.MiddlewareTraceTemplate(),
-		"internal/middleware/logger.go":           templates.MiddlewareLoggerTemplate(),
-		"internal/middleware/client_info.go":      templates.MiddlewareClientInfoTemplate(),
-
-		"internal/version/version.go": templates.VersionTemplate(),
-	}
-
-	// Create project files
-	projectFiles := map[string]string{
-		"internal/config/config.go": templates.StandaloneConfigTemplate(data.Name, data.ModuleName),
-
-		// Handler Layer
-		"handler/provider.go": templates.StandaloneHandlerProviderTemplate(data.Name, data.ModuleName),
-		"handler/handler.go":  templates.StandaloneHandlerTemplate(data.Name, data.ModuleName),
-
-		// Service Layer
-		"service/provider.go": templates.StandaloneServiceProviderTemplate(data.Name, data.ModuleName),
-		"service/service.go":  templates.StandaloneServiceTemplate(data.Name, data.ModuleName),
-
-		// Data Layer
-		"data/data.go":        selectDataTemplate(*data),
-		"data/model/model.go": templates.StandaloneModelTemplate(data.Name, data.ModuleName),
-
-		// Repository Layer
-		"data/repository/provider.go":   templates.StandaloneRepositoryProviderTemplate(data.Name, data.ModuleName),
-		"data/repository/repository.go": templates.StandaloneRepositoryTemplate(data.Name, data.ModuleName, data.UseMongo, data.UseEnt, data.UseGorm),
-	}
-
-	// Merge all maps
+	// Prepare file content map
 	files := make(map[string]string)
-	for k, v := range cmdFiles {
-		files[k] = v
+
+	// Generate base files
+	if content, err := registry.RenderMain(tmplData); err == nil {
+		files[fmt.Sprintf("cmd/%s/main.go", data.Name)] = content
+	} else {
+		return fmt.Errorf("failed to render main.go: %w", err)
 	}
-	for k, v := range internalFiles {
-		files[k] = v
+
+	if content, err := registry.RenderVersion(tmplData); err == nil {
+		files["internal/version/version.go"] = content
+	} else {
+		return fmt.Errorf("failed to render version.go: %w", err)
 	}
-	for k, v := range projectFiles {
-		files[k] = v
+
+	if content, err := registry.RenderMakefile(tmplData); err == nil {
+		files["Makefile"] = content
+	} else {
+		return fmt.Errorf("failed to render Makefile: %w", err)
+	}
+
+	if content, err := registry.RenderGitignore(tmplData); err == nil {
+		files[".gitignore"] = content
+	} else {
+		return fmt.Errorf("failed to render .gitignore: %w", err)
+	}
+
+	if content, err := registry.RenderReadme(tmplData); err == nil {
+		files["README.md"] = content
+	} else {
+		return fmt.Errorf("failed to render README.md: %w", err)
+	}
+
+	if content, err := registry.RenderConfigYaml(tmplData); err == nil {
+		files["configs/config.example.yaml"] = content
+	} else {
+		return fmt.Errorf("failed to render config.yaml: %w", err)
+	}
+
+	// Server layer
+	if content, err := registry.RenderServer(tmplData); err == nil {
+		files["internal/server/server.go"] = content
+	} else {
+		return fmt.Errorf("failed to render server.go: %w", err)
+	}
+
+	if content, err := registry.RenderHTTP(tmplData); err == nil {
+		files["internal/server/http.go"] = content
+	} else {
+		return fmt.Errorf("failed to render http.go: %w", err)
+	}
+
+	if content, err := registry.RenderRest(tmplData); err == nil {
+		files["internal/server/rest.go"] = content
+	} else {
+		return fmt.Errorf("failed to render rest.go: %w", err)
+	}
+
+	// Config layer
+	if content, err := registry.RenderConfig(tmplData); err == nil {
+		files["internal/config/config.go"] = content
+	} else {
+		return fmt.Errorf("failed to render config.go: %w", err)
+	}
+
+	// Handler layer
+	if content, err := registry.RenderHandlerProvider(tmplData); err == nil {
+		files["handler/provider.go"] = content
+	} else {
+		return fmt.Errorf("failed to render handler provider.go: %w", err)
+	}
+
+	if content, err := registry.RenderHandler(tmplData); err == nil {
+		files["handler/handler.go"] = content
+	} else {
+		return fmt.Errorf("failed to render handler.go: %w", err)
+	}
+
+	// Service layer
+	if content, err := registry.RenderServiceProvider(tmplData); err == nil {
+		files["service/provider.go"] = content
+	} else {
+		return fmt.Errorf("failed to render service provider.go: %w", err)
+	}
+
+	if content, err := registry.RenderService(tmplData); err == nil {
+		files["service/service.go"] = content
+	} else {
+		return fmt.Errorf("failed to render service.go: %w", err)
+	}
+
+	// Data layer
+	if content, err := registry.RenderData(tmplData); err == nil {
+		files["data/data.go"] = content
+	} else {
+		return fmt.Errorf("failed to render data.go: %w", err)
+	}
+
+	if content, err := registry.RenderModel(tmplData); err == nil {
+		files["data/model/model.go"] = content
+	} else {
+		return fmt.Errorf("failed to render model.go: %w", err)
+	}
+
+	// Repository layer
+	if content, err := registry.RenderRepositoryProvider(tmplData); err == nil {
+		files["data/repository/provider.go"] = content
+	} else {
+		return fmt.Errorf("failed to render repository provider.go: %w", err)
+	}
+
+	if content, err := registry.RenderRepository(tmplData); err == nil {
+		files["data/repository/repository.go"] = content
+	} else {
+		return fmt.Errorf("failed to render repository.go: %w", err)
+	}
+
+	// Middleware layer
+	if content, err := registry.RenderMiddlewareCORS(tmplData); err == nil {
+		files["internal/middleware/cors.go"] = content
+	} else {
+		return fmt.Errorf("failed to render CORS middleware: %w", err)
+	}
+
+	if content, err := registry.RenderMiddlewareTrace(tmplData); err == nil {
+		files["internal/middleware/trace.go"] = content
+	} else {
+		return fmt.Errorf("failed to render Trace middleware: %w", err)
+	}
+
+	if content, err := registry.RenderMiddlewareLogger(tmplData); err == nil {
+		files["internal/middleware/logger.go"] = content
+	} else {
+		return fmt.Errorf("failed to render Logger middleware: %w", err)
+	}
+
+	if content, err := registry.RenderMiddlewareSecurityHeaders(tmplData); err == nil {
+		files["internal/middleware/security_headers.go"] = content
+	} else {
+		return fmt.Errorf("failed to render Security Headers middleware: %w", err)
+	}
+
+	if content, err := registry.RenderMiddlewareClientInfo(tmplData); err == nil {
+		files["internal/middleware/client_info.go"] = content
+	} else {
+		return fmt.Errorf("failed to render Client Info middleware: %w", err)
 	}
 
 	// Add test files if required
@@ -529,18 +654,26 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 
 	// Add schema if Ent
 	if data.UseEnt {
-		files["data/schema/user.go"] = templates.SchemaTemplate() // Using User as example
-		files["generate.go"] = templates.GeneraterTemplate(data.Name, data.ExtType, data.ModuleName)
+		if content, err := registry.RenderSchema(tmplData); err == nil {
+			files["data/schema/user.go"] = content
+		} else {
+			return fmt.Errorf("failed to render schema: %w", err)
+		}
+		if content, err := registry.RenderGenerate(tmplData); err == nil {
+			files["generate.go"] = content
+		} else {
+			return fmt.Errorf("failed to render generate.go: %w", err)
+		}
 	}
 
 	// Write all files
-	for filePath, tmpl := range files {
-		if err := utils.WriteTemplateFile(
-			filepath.Join(basePath, filePath),
-			tmpl,
-			data,
-		); err != nil {
-			return fmt.Errorf("failed to create file %s: %v", filePath, err)
+	for filePath, content := range files {
+		fullPath := filepath.Join(basePath, filePath)
+		if err := utils.EnsureDir(filepath.Dir(fullPath)); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %v", filePath, err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write file %s: %v", filePath, err)
 		}
 	}
 
@@ -552,6 +685,9 @@ func getDesc(data *templates.Data) string {
 	if data.Type == "custom" {
 		return fmt.Sprintf("'%s' directory", data.CustomDir)
 	}
+	if data.Type == "direct" {
+		return fmt.Sprintf("'%s' directory", data.Name)
+	}
 	return extDescriptions[data.ExtType]
 }
 
@@ -561,229 +697,102 @@ func initializeGoModule(basePath string, data *templates.Data, opts *Options) er
 	// Create go.mod file
 	goModPath := filepath.Join(basePath, "go.mod")
 
+	// Use strings.Builder for efficient string concatenation
+	var builder strings.Builder
+
 	// Create initial go.mod content
-	goModContent := fmt.Sprintf(`module %s
+	fmt.Fprintf(&builder, `module %s
 
- go 1.24
+go 1.25.5
 
- require (
+require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/spf13/cobra v1.8.1
 	github.com/google/uuid v1.6.0
-	github.com/ncobase/ncore/config v0.2.0
-	github.com/ncobase/ncore/logging v0.2.0
-	github.com/ncobase/ncore/version v0.2.0
-)
-
- replace (
-	github.com/ncobase/ncore/config => ../ncore/config
-	github.com/ncobase/ncore/logging => ../ncore/logging
-	github.com/ncobase/ncore/version => ../ncore/version
-	github.com/ncobase/ncore/data => ../ncore/data
-	github.com/ncobase/ncore/net => ../ncore/net
-	github.com/ncobase/ncore/ecode => ../ncore/ecode
-	github.com/ncobase/ncore/types => ../ncore/types
-	github.com/ncobase/ncore/utils => ../ncore/utils
-	github.com/ncobase/ncore/validation => ../ncore/validation
-	github.com/ncobase/ncore/consts => ../ncore/consts
-	github.com/ncobase/ncore/ctxutil => ../ncore/ctxutil
-	github.com/ncobase/ncore/extension => ../ncore/extension
-	github.com/ncobase/ncore/concurrency => ../ncore/concurrency
-	github.com/ncobase/ncore/messaging => ../ncore/messaging
-	github.com/ncobase/ncore/security => ../ncore/security
 )
 `, data.PackagePath)
 
+	// Add ncore dependencies with versions
+	ncoreDeps := []string{
+		"github.com/ncobase/ncore/config",
+		"github.com/ncobase/ncore/logging",
+		"github.com/ncobase/ncore/ecode",
+		"github.com/ncobase/ncore/net",
+		"github.com/ncobase/ncore/extension",
+	}
+
 	// Add database-specific dependencies
 	if opts.UseMongo {
-		goModContent += `
-require (
-	go.mongodb.org/mongo-driver v1.17.6
-)
-`
+		builder.WriteString("\nrequire go.mongodb.org/mongo-driver v1.17.6\n")
 	}
 
 	if opts.UseEnt {
-		goModContent += `
-require (
-	entgo.io/ent v0.14.1
-)
-`
+		builder.WriteString("\nrequire entgo.io/ent v0.14.1\n")
 	}
 
 	if opts.UseGorm {
-		goModContent += `
+		builder.WriteString(`
 require (
 	gorm.io/gorm v1.25.12
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/driver/sqlite v1.5.7
 )
-`
+`)
 	}
 
-	if opts.DBDriver != "" {
-		goModContent += fmt.Sprintf(`
-require (
-	github.com/ncobase/ncore/data/%s v0.2.0
-)
-`, opts.DBDriver)
+	// Add data driver dependencies
+	if opts.DBDriver != "" && opts.DBDriver != "none" {
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/"+opts.DBDriver)
 	}
 
 	if opts.UseRedis {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/redis v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/redis")
 	}
 
 	if opts.UseElastic {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/elasticsearch v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/elasticsearch")
 	}
 
 	if opts.UseOpenSearch {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/opensearch v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/opensearch")
 	}
 
 	if opts.UseMeili {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/meilisearch v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/meilisearch")
 	}
 
 	if opts.UseKafka {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/kafka v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/kafka")
 	}
 
 	if opts.UseRabbitMQ {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/rabbitmq v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/rabbitmq")
 	}
 
 	if opts.UseS3Storage {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/s3 v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/s3")
 	}
 
 	if opts.UseMinio {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/minio v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/minio")
 	}
 
 	if opts.UseAliyun {
-		goModContent += `
-require (
-	github.com/ncobase/ncore/data/aliyun v0.2.0
-)
-`
+		ncoreDeps = append(ncoreDeps, "github.com/ncobase/ncore/data/aliyun")
 	}
 
-	if opts.DBDriver != "" {
-		goModContent += fmt.Sprintf(`
-replace (
-	github.com/ncobase/ncore/data/%s => ../ncore/data/%s
-)
-`, opts.DBDriver, opts.DBDriver)
-	}
-
-	if opts.UseRedis {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/redis => ../ncore/data/redis
-)
-`
-	}
-
-	if opts.UseElastic {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/elasticsearch => ../ncore/data/elasticsearch
-)
-`
-	}
-
-	if opts.UseOpenSearch {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/opensearch => ../ncore/data/opensearch
-)
-`
-	}
-
-	if opts.UseMeili {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/meilisearch => ../ncore/data/meilisearch
-)
-`
-	}
-
-	if opts.UseKafka {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/kafka => ../ncore/data/kafka
-)
-`
-	}
-
-	if opts.UseRabbitMQ {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/rabbitmq => ../ncore/data/rabbitmq
-)
-`
-	}
-
-	if opts.UseS3Storage {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/s3 => ../ncore/data/s3
-)
-`
-	}
-
-	if opts.UseMinio {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/minio => ../ncore/data/minio
-)
-`
-	}
-
-	if opts.UseAliyun {
-		goModContent += `
-replace (
-	github.com/ncobase/ncore/data/aliyun => ../ncore/data/aliyun
-)
-`
+	// Add replace directives for local development
+	builder.WriteString("\n// Replace directives for local ncore development\n")
+	builder.WriteString("// Remove these lines and run 'go mod tidy' when ncore packages are published\n")
+	for _, dep := range ncoreDeps {
+		// Extract module name from path (e.g., "config" from "github.com/ncobase/ncore/config")
+		parts := strings.Split(dep, "/")
+		moduleName := parts[len(parts)-1]
+		fmt.Fprintf(&builder, "// replace %s => ../../ncore/%s\n", dep, moduleName)
 	}
 
 	// Write go.mod file
-	if err := utils.WriteTemplateFile(goModPath, goModContent, nil); err != nil {
+	if err := utils.WriteTemplateFile(goModPath, builder.String(), nil); err != nil {
 		return fmt.Errorf("failed to create go.mod file: %v", err)
 	}
 
@@ -844,7 +853,7 @@ Thumbs.db
 
 ## Overview
 
-This application was generated using the Ncobase CLI (nco). It follows the standard Ncobase architecture and best practices, employing a clean architecture design with domain-driven principles.
+This application was generated using the Ncobase CLI. It follows the standard Ncobase architecture and best practices, employing a clean architecture design with domain-driven principles.
 
 ## Project Structure
 
@@ -986,6 +995,92 @@ logger:
 
 	if err := utils.WriteTemplateFile(configPath, configContent, nil); err != nil {
 		fmt.Printf("Warning: failed to create config.yaml file: %v\n", err)
+		// Just warn, don't stop the process
+	}
+
+	// Create Makefile for build support
+	makefilePath := filepath.Join(basePath, "Makefile")
+	makefileContent := fmt.Sprintf(`# Makefile for %s
+
+# Binary name
+BINARY_NAME=%s
+OUTPUT_DIR=bin
+
+# Version information
+VERSION ?= $(shell git describe --tags --match "v*" --always 2>/dev/null || echo "v0.0.0")
+BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+REVISION ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME ?= $(shell date -u '+%%Y-%%m-%%dT%%H:%%M:%%SZ')
+GO_VERSION ?= $(shell go version | cut -d' ' -f3)
+
+# Linker flags to set version information
+LDFLAGS=-ldflags "\
+	-X '%s/internal/version.Version=$(VERSION)' \
+	-X '%s/internal/version.Branch=$(BRANCH)' \
+	-X '%s/internal/version.Revision=$(REVISION)' \
+	-X '%s/internal/version.BuiltAt=$(BUILD_TIME)' \
+	-X '%s/internal/version.GoVersion=$(GO_VERSION)'"
+
+.PHONY: all build run clean test help
+
+all: build
+
+## build: Build the application binary
+build:
+	@echo "Building $(BINARY_NAME)..."
+	@mkdir -p $(OUTPUT_DIR)
+	@go build $(LDFLAGS) -o $(OUTPUT_DIR)/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
+	@echo "Build complete: $(OUTPUT_DIR)/$(BINARY_NAME)"
+
+## run: Run the application
+run:
+	@go run $(LDFLAGS) ./cmd/$(BINARY_NAME)
+
+## clean: Remove build artifacts
+clean:
+	@echo "Cleaning..."
+	@rm -rf $(OUTPUT_DIR)
+	@go clean
+	@echo "Clean complete"
+
+## test: Run tests
+test:
+	@echo "Running tests..."
+	@go test -v ./...
+
+## lint: Run linters
+lint:
+	@echo "Running linters..."
+	@golangci-lint run || echo "golangci-lint not installed, skipping..."
+
+## fmt: Format code
+fmt:
+	@echo "Formatting code..."
+	@go fmt ./...
+
+## tidy: Tidy dependencies
+tidy:
+	@echo "Tidying dependencies..."
+	@go mod tidy
+
+## version: Show version information
+version:
+	@echo "Version:    $(VERSION)"
+	@echo "Branch:     $(BRANCH)"
+	@echo "Revision:   $(REVISION)"
+	@echo "Build Time: $(BUILD_TIME)"
+	@echo "Go Version: $(GO_VERSION)"
+
+## help: Show this help message
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Available targets:"
+	@sed -n 's/^##//p' Makefile | column -t -s ':' | sed -e 's/^/ /'
+`, data.Name, data.Name, data.PackagePath, data.PackagePath, data.PackagePath, data.PackagePath, data.PackagePath)
+
+	if err := utils.WriteTemplateFile(makefilePath, makefileContent, nil); err != nil {
+		fmt.Printf("Warning: failed to create Makefile: %v\n", err)
 		// Just warn, don't stop the process
 	}
 

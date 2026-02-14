@@ -1,0 +1,296 @@
+package service_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"{{ .PackagePath }}/service"
+	"{{ .PackagePath }}/data/repository"
+)
+
+func TestServiceGetExample(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("successful retrieval", func(t *testing.T) {
+		// Execute
+		result, err := svc.GetExample(ctx)
+
+		// Assert
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.NotEmpty(t, result.ID)
+		assert.NotEmpty(t, result.Name)
+	})
+}
+
+func TestServiceCreate(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("successful creation", func(t *testing.T) {
+		// Prepare data
+		// req := &structs.CreateRequest{
+		//     Name: "Test Item",
+		// }
+
+		// Execute
+		// result, err := svc.Create(ctx, req)
+
+		// Assert
+		// require.NoError(t, err)
+		// assert.NotNil(t, result)
+		// assert.Equal(t, req.Name, result.Name)
+	})
+
+	t.Run("validation error", func(t *testing.T) {
+		// Test with invalid data
+		// req := &structs.CreateRequest{
+		//     Name: "", // Empty name
+		// }
+
+		// result, err := svc.Create(ctx, req)
+
+		// assert.Error(t, err)
+		// assert.Nil(t, result)
+	})
+
+	t.Run("duplicate entry", func(t *testing.T) {
+		// Test duplicate creation
+		// This would require setting up test data first
+	})
+}
+
+func TestServiceUpdate(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("successful update", func(t *testing.T) {
+		// Prepare update request
+		// req := &structs.UpdateRequest{
+		//     ID:   "test-id",
+		//     Name: "Updated Name",
+		// }
+
+		// Execute
+		// result, err := svc.Update(ctx, req)
+
+		// Assert
+		// require.NoError(t, err)
+		// assert.NotNil(t, result)
+		// assert.Equal(t, req.Name, result.Name)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		// req := &structs.UpdateRequest{
+		//     ID:   "non-existent-id",
+		//     Name: "Updated Name",
+		// }
+
+		// result, err := svc.Update(ctx, req)
+
+		// assert.Error(t, err)
+		// assert.Nil(t, result)
+	})
+}
+
+func TestServiceDelete(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("successful deletion", func(t *testing.T) {
+		// Execute
+		// err := svc.Delete(ctx, "test-id")
+
+		// Assert
+		// require.NoError(t, err)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		// err := svc.Delete(ctx, "non-existent-id")
+
+		// assert.Error(t, err)
+	})
+
+	t.Run("soft delete", func(t *testing.T) {
+		// Test soft delete if implemented
+		// err := svc.Delete(ctx, "test-id")
+		// require.NoError(t, err)
+
+		// Verify item is marked as deleted but still exists
+		// result, err := svc.GetIncludingDeleted(ctx, "test-id")
+		// require.NoError(t, err)
+		// assert.NotNil(t, result.DeletedAt)
+	})
+}
+
+func TestServiceList(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("list all", func(t *testing.T) {
+		// Execute
+		// results, err := svc.List(ctx, &structs.ListRequest{})
+
+		// Assert
+		// require.NoError(t, err)
+		// assert.NotNil(t, results)
+	})
+
+	t.Run("with pagination", func(t *testing.T) {
+		// req := &structs.ListRequest{
+		//     Page:     1,
+		//     PageSize: 10,
+		// }
+
+		// results, err := svc.List(ctx, req)
+
+		// require.NoError(t, err)
+		// assert.LessOrEqual(t, len(results.Items), 10)
+	})
+
+	t.Run("with filters", func(t *testing.T) {
+		// req := &structs.ListRequest{
+		//     Filters: []Filter{
+		//         {Field: "name", Operator: "like", Value: "test"},
+		//     },
+		// }
+
+		// results, err := svc.List(ctx, req)
+
+		// require.NoError(t, err)
+		// for _, item := range results.Items {
+		//     assert.Contains(t, strings.ToLower(item.Name), "test")
+		// }
+	})
+
+	t.Run("with sorting", func(t *testing.T) {
+		// req := &structs.ListRequest{
+		//     Sorts: []Sort{
+		//         {Field: "created_at", Order: "desc"},
+		//     },
+		// }
+
+		// results, err := svc.List(ctx, req)
+
+		// require.NoError(t, err)
+		// Verify results are sorted correctly
+	})
+}
+
+func TestServiceBatchOperations(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("batch create", func(t *testing.T) {
+		// items := []*structs.CreateRequest{
+		//     {Name: "Item 1"},
+		//     {Name: "Item 2"},
+		//     {Name: "Item 3"},
+		// }
+
+		// results, err := svc.BatchCreate(ctx, items)
+
+		// require.NoError(t, err)
+		// assert.Len(t, results, len(items))
+	})
+
+	t.Run("batch update", func(t *testing.T) {
+		// Test batch update logic
+	})
+
+	t.Run("batch delete", func(t *testing.T) {
+		// ids := []string{"id1", "id2", "id3"}
+
+		// err := svc.BatchDelete(ctx, ids)
+
+		// require.NoError(t, err)
+	})
+}
+
+func TestServiceTransactions(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("successful transaction", func(t *testing.T) {
+		// Test transaction that succeeds
+		// err := svc.TransactionOperation(ctx, func(ctx context.Context) error {
+		//     // Multiple operations
+		//     return nil
+		// })
+
+		// require.NoError(t, err)
+	})
+
+	t.Run("transaction rollback", func(t *testing.T) {
+		// Test transaction that rolls back
+		// err := svc.TransactionOperation(ctx, func(ctx context.Context) error {
+		//     // Operation that fails
+		//     return errors.New("intentional error")
+		// })
+
+		// assert.Error(t, err)
+		// Verify rollback occurred
+	})
+}
+
+func TestServiceConcurrency(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("concurrent reads", func(t *testing.T) {
+		// Test multiple concurrent read operations
+		// done := make(chan bool, 10)
+		// for i := 0; i < 10; i++ {
+		//     go func() {
+		//         _, err := svc.GetExample(ctx)
+		//         assert.NoError(t, err)
+		//         done <- true
+		//     }()
+		// }
+		//
+		// for i := 0; i < 10; i++ {
+		//     <-done
+		// }
+	})
+
+	t.Run("concurrent writes", func(t *testing.T) {
+		// Test concurrent write operations
+		// Ensure proper locking/transaction handling
+	})
+}
+
+func TestServiceValidation(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(nil)
+	svc := service.New(repo)
+	defer svc.Close()
+
+	t.Run("business rule validation", func(t *testing.T) {
+		// Test business logic validation
+	})
+
+	t.Run("data consistency", func(t *testing.T) {
+		// Test data consistency checks
+	})
+}

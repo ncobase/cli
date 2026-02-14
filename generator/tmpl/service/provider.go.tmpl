@@ -1,0 +1,31 @@
+package service
+
+import (
+	"context"
+
+	"{{ .PackagePath }}/data/model"
+	"{{ .PackagePath }}/data/repository"
+)
+
+// Interface defines the service interface
+type Interface interface {
+	// Example method
+	GetExample(ctx context.Context) (*model.ExampleResponse, error)
+
+	// Add your service methods here
+
+	// Cleanup
+	Close() error
+}
+
+// service implements the Interface
+type service struct {
+	repo repository.Interface
+}
+
+// New creates a new service instance
+func New(repo repository.Interface) Interface {
+	return &service{
+		repo: repo,
+	}
+}

@@ -1,0 +1,344 @@
+package features
+
+import (
+	"context"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/ncobase/ncore/logging/logger"
+	"github.com/ncobase/ncore/net/resp"
+)
+
+// UploadConfig holds upload configuration
+type UploadConfig struct {
+	MaxFileSize   int64    // Maximum file size in bytes
+	AllowedTypes  []string // Allowed MIME types
+	UploadPath    string   // Upload directory path
+	GenerateThumbnail bool // Whether to generate thumbnails for images
+	ThumbnailSizes []ThumbnailSize
+}
+
+// ThumbnailSize represents thumbnail dimensions
+type ThumbnailSize struct {
+	Name   string
+	Width  int
+	Height int
+}
+
+// FileInfo represents uploaded file information
+type FileInfo struct {
+	ID           string    `json:"id"`
+	OriginalName string    `json:"original_name"`
+	Filename     string    `json:"filename"`
+	Path         string    `json:"path"`
+	URL          string    `json:"url"`
+	Size         int64     `json:"size"`
+	MimeType     string    `json:"mime_type"`
+	Extension    string    `json:"extension"`
+	MD5          string    `json:"md5"`
+	Thumbnails   []string  `json:"thumbnails,omitempty"`
+	UploadedAt   time.Time `json:"uploaded_at"`
+	UploadedBy   string    `json:"uploaded_by,omitempty"`
+}
+
+// DefaultUploadConfig returns default upload configuration
+func DefaultUploadConfig() *UploadConfig {
+	return &UploadConfig{
+		MaxFileSize: 10 * 1024 * 1024, // 10MB
+		AllowedTypes: []string{
+			"image/jpeg",
+			"image/png",
+			"image/gif",
+			"image/webp",
+			"application/pdf",
+			"application/msword",
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			"application/vnd.ms-excel",
+			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		},
+		UploadPath: "./uploads",
+		GenerateThumbnail: true,
+		ThumbnailSizes: []ThumbnailSize{
+			{Name: "small", Width: 150, Height: 150},
+			{Name: "medium", Width: 300, Height: 300},
+			{Name: "large", Width: 800, Height: 800},
+		},
+	}
+}
+
+// UploadHandler handles file upload
+func UploadHandler(config *UploadConfig) gin.HandlerFunc {
+	if config == nil {
+		config = DefaultUploadConfig()
+	}
+
+	// Ensure upload directory exists
+	if err := os.MkdirAll(config.UploadPath, 0755); err != nil {
+		panic(fmt.Sprintf("Failed to create upload directory: %v", err))
+	}
+
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Parse multipart form
+		if err := c.Request.ParseMultipartForm(config.MaxFileSize); err != nil {
+			logger.Errorf(ctx, "Failed to parse multipart form: %v", err)
+			resp.Fail(c.Writer, resp.BadRequest("Failed to parse upload form"))
+			return
+		}
+
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			logger.Errorf(ctx, "Failed to get file from form: %v", err)
+			resp.Fail(c.Writer, resp.BadRequest("No file uploaded"))
+			return
+		}
+		defer file.Close()
+
+		// Validate file size
+		if header.Size > config.MaxFileSize {
+			resp.Fail(c.Writer, resp.BadRequest(fmt.Sprintf("File size exceeds maximum allowed size of %d bytes", config.MaxFileSize)))
+			return
+		}
+
+		// Validate file type
+		if !isAllowedType(header.Header.Get("Content-Type"), config.AllowedTypes) {
+			resp.Fail(c.Writer, resp.BadRequest("File type not allowed"))
+			return
+		}
+
+		// Generate file info
+		fileInfo, err := saveFile(ctx, file, header, config)
+		if err != nil {
+			logger.Errorf(ctx, "Failed to save file: %v", err)
+			resp.Fail(c.Writer, resp.InternalServerError("Failed to save file"))
+			return
+		}
+
+		// Get user ID if available
+		if userID, exists := c.Get("user_id"); exists {
+			fileInfo.UploadedBy = userID.(string)
+		}
+
+		resp.Success(c.Writer, fileInfo)
+	}
+}
+
+// saveFile saves the uploaded file
+func saveFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, config *UploadConfig) (*FileInfo, error) {
+	// Generate unique filename
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+
+	// Create date-based subdirectory
+	now := time.Now()
+	subDir := fmt.Sprintf("%d/%02d/%02d", now.Year(), now.Month(), now.Day())
+	uploadDir := filepath.Join(config.UploadPath, subDir)
+
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create upload directory: %w", err)
+	}
+
+	// Full file path
+	filePath := filepath.Join(uploadDir, filename)
+
+	// Create destination file
+	dst, err := os.Create(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file: %w", err)
+	}
+	defer dst.Close()
+
+	// Calculate MD5 while copying
+	hash := md5.New()
+	multiWriter := io.MultiWriter(dst, hash)
+
+	// Copy file content
+	size, err := io.Copy(multiWriter, file)
+	if err != nil {
+		os.Remove(filePath)
+		return nil, fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	// Calculate MD5
+	md5Sum := hex.EncodeToString(hash.Sum(nil))
+
+	fileInfo := &FileInfo{
+		ID:           uuid.New().String(),
+		OriginalName: header.Filename,
+		Filename:     filename,
+		Path:         filePath,
+		URL:          fmt.Sprintf("/uploads/%s/%s", subDir, filename),
+		Size:         size,
+		MimeType:     header.Header.Get("Content-Type"),
+		Extension:    strings.TrimPrefix(ext, "."),
+		MD5:          md5Sum,
+		UploadedAt:   now,
+	}
+
+	// Generate thumbnails for images
+	if config.GenerateThumbnail && isImage(header.Header.Get("Content-Type")) {
+		thumbnails, err := generateThumbnails(ctx, filePath, config.ThumbnailSizes)
+		if err != nil {
+			logger.Warnf(ctx, "Failed to generate thumbnails: %v", err)
+		} else {
+			fileInfo.Thumbnails = thumbnails
+		}
+	}
+
+	return fileInfo, nil
+}
+
+// isAllowedType checks if file type is allowed
+func isAllowedType(mimeType string, allowedTypes []string) bool {
+	if len(allowedTypes) == 0 {
+		return true
+	}
+
+	for _, allowed := range allowedTypes {
+		if allowed == mimeType {
+			return true
+		}
+		// Wildcard matching (e.g., "image/*")
+		if strings.HasSuffix(allowed, "/*") {
+			prefix := strings.TrimSuffix(allowed, "/*")
+			if strings.HasPrefix(mimeType, prefix+"/") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isImage checks if file is an image
+func isImage(mimeType string) bool {
+	return strings.HasPrefix(mimeType, "image/")
+}
+
+// generateThumbnails generates image thumbnails
+func generateThumbnails(ctx context.Context, filePath string, sizes []ThumbnailSize) ([]string, error) {
+	// Placeholder implementation
+	// In production, use an image processing library like:
+	// - github.com/disintegration/imaging
+	// - github.com/nfnt/resize
+	// - github.com/h2non/bimg (libvips wrapper)
+
+	thumbnails := make([]string, 0)
+
+	// Example implementation would be:
+	// for _, size := range sizes {
+	//     thumbPath := strings.TrimSuffix(filePath, filepath.Ext(filePath)) +
+	//         fmt.Sprintf("_%s%s", size.Name, filepath.Ext(filePath))
+	//
+	//     // Generate thumbnail using image library
+	//     // ...
+	//
+	//     thumbnails = append(thumbnails, thumbPath)
+	// }
+
+	return thumbnails, nil
+}
+
+// MultiUploadHandler handles multiple file uploads
+func MultiUploadHandler(config *UploadConfig) gin.HandlerFunc {
+	if config == nil {
+		config = DefaultUploadConfig()
+	}
+
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Parse multipart form
+		if err := c.Request.ParseMultipartForm(config.MaxFileSize * 10); err != nil {
+			logger.Errorf(ctx, "Failed to parse multipart form: %v", err)
+			resp.Fail(c.Writer, resp.BadRequest("Failed to parse upload form"))
+			return
+		}
+
+		form := c.Request.MultipartForm
+		files := form.File["files"]
+
+		if len(files) == 0 {
+			resp.Fail(c.Writer, resp.BadRequest("No files uploaded"))
+			return
+		}
+
+		uploadedFiles := make([]*FileInfo, 0, len(files))
+
+		for _, header := range files {
+			file, err := header.Open()
+			if err != nil {
+				logger.Errorf(ctx, "Failed to open file: %v", err)
+				continue
+			}
+
+			// Validate and save file
+			if header.Size <= config.MaxFileSize &&
+				isAllowedType(header.Header.Get("Content-Type"), config.AllowedTypes) {
+
+				fileInfo, err := saveFile(ctx, file, header, config)
+				if err != nil {
+					logger.Errorf(ctx, "Failed to save file %s: %v", header.Filename, err)
+				} else {
+					if userID, exists := c.Get("user_id"); exists {
+						fileInfo.UploadedBy = userID.(string)
+					}
+					uploadedFiles = append(uploadedFiles, fileInfo)
+				}
+			}
+
+			file.Close()
+		}
+
+		resp.Success(c.Writer, gin.H{
+			"uploaded": len(uploadedFiles),
+			"total":    len(files),
+			"files":    uploadedFiles,
+		})
+	}
+}
+
+// DeleteFileHandler handles file deletion
+func DeleteFileHandler(config *UploadConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		filePath := c.Param("path")
+
+		if filePath == "" {
+			resp.Fail(c.Writer, resp.BadRequest("File path required"))
+			return
+		}
+
+		// Construct full path
+		fullPath := filepath.Join(config.UploadPath, filePath)
+
+		// Security check: ensure path is within upload directory
+		if !strings.HasPrefix(fullPath, config.UploadPath) {
+			resp.Fail(c.Writer, resp.Forbidden("Invalid file path"))
+			return
+		}
+
+		// Delete file
+		if err := os.Remove(fullPath); err != nil {
+			if os.IsNotExist(err) {
+				resp.Fail(c.Writer, resp.NotFound("File not found"))
+			} else {
+				logger.Errorf(ctx, "Failed to delete file: %v", err)
+				resp.Fail(c.Writer, resp.InternalServerError("Failed to delete file"))
+			}
+			return
+		}
+
+		resp.Success(c.Writer, gin.H{"message": "File deleted successfully"})
+	}
+}

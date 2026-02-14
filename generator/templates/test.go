@@ -10,7 +10,7 @@ import (
 	"testing"
 	"github.com/ncobase/ncore/config"
 	ext "github.com/ncobase/ncore/extension/types"
-	"{{ .PackagePath }}"
+	"%s/%s/%s"
 )
 
 func TestModuleLifecycle(t *testing.T) {
@@ -47,7 +47,7 @@ func TestModuleLifecycle(t *testing.T) {
 			t.Errorf("Cleanup failed: %%v", err)
 		}
 	})
-}`, name, name, name)
+}`, moduleName, extType, name, name, name, name)
 }
 
 // HandlerTestTemplate generates handler test template
@@ -59,8 +59,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"github.com/gin-gonic/gin"
-	"{{ .PackagePath }}/handler"
-	"{{ .PackagePath }}/service"
+	"%s/%s/%s/handler"
+	"%s/%s/%s/service"
 )
 
 func TestHandler(t *testing.T) {
@@ -86,7 +86,7 @@ func TestHandler(t *testing.T) {
 			t.Errorf("want status 200, got %%d", w.Code)
 		}
 	})
-}`)
+}`, moduleName, extType, name, moduleName, extType, name)
 }
 
 // ServiceTestTemplate generates service test template
@@ -96,8 +96,8 @@ func ServiceTestTemplate(name, extType, moduleName string) string {
 import (
 	"testing"
 	"context"
-	"{{ .PackagePath }}/service"
-	"{{ .PackagePath }}/structs"
+	"%s/%s/%s/service"
+	"%s/%s/%s/structs"
 )
 
 func TestService(t *testing.T) {
@@ -121,145 +121,5 @@ func TestService(t *testing.T) {
 			t.Errorf("want name %%s, got %%s", req.Name, resp.Name)
 		}
 	})
-}`)
-}
-
-// StandaloneHandlerTestTemplate generates handler test template for standalone apps
-
-func StandaloneHandlerTestTemplate(name, moduleName string) string {
-
-	return fmt.Sprintf(`package tests
-
-
-
-import (
-
-	"net/http"
-
-	"net/http/httptest"
-
-	"testing"
-
-
-
-	"github.com/gin-gonic/gin"
-
-	"{{ .PackagePath }}/handler"
-
-	"{{ .PackagePath }}/service"
-
-)
-
-
-
-func TestHandler(t *testing.T) {
-
-	gin.SetMode(gin.TestMode)
-
-	
-
-	// Mock service
-
-	// In a real test, you would use a mock implementation of repository
-
-	s := service.New(nil)
-
-	h := handler.New(s)
-
-
-
-	t.Run("get example", func(t *testing.T) {
-
-		r := gin.New()
-
-		r.GET("/example", h.GetExample)
-
-
-
-		w := httptest.NewRecorder()
-
-		req := httptest.NewRequest("GET", "/example", nil)
-
-
-
-		r.ServeHTTP(w, req)
-
-
-
-		if w.Code != http.StatusOK {
-
-			t.Errorf("want status 200, got %%d", w.Code)
-
-		}
-
-	})
-
-}
-
-`)
-
-}
-
-
-
-// StandaloneServiceTestTemplate generates service test template for standalone apps
-
-func StandaloneServiceTestTemplate(name, moduleName string) string {
-
-	return fmt.Sprintf(`package tests
-
-
-
-import (
-
-	"context"
-
-	"testing"
-
-
-
-	"{{ .PackagePath }}/service"
-
-)
-
-
-
-func TestService(t *testing.T) {
-
-	ctx := context.Background()
-
-	// Mock repository
-
-	s := service.New(nil)
-
-
-
-	t.Run("get example", func(t *testing.T) {
-
-		resp, err := s.GetExample(ctx)
-
-		if err != nil {
-
-			t.Errorf("unexpected error: %%v", err)
-
-		}
-
-		if resp == nil {
-
-			t.Error("response should not be nil")
-
-		}
-
-		if resp.Name != "Example Model" {
-
-			t.Errorf("want name 'Example Model', got %%s", resp.Name)
-
-		}
-
-	})
-
-}
-
-`)
-
+}`, moduleName, extType, name, moduleName, extType, name)
 }

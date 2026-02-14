@@ -1,0 +1,136 @@
+package middleware
+
+import (
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/net/resp"
+)
+
+// RateLimiter implements token bucket algorithm for rate limiting
+type RateLimiter struct {
+	mu       sync.Mutex
+	buckets  map[string]*bucket
+	capacity int
+	rate     time.Duration
+	cleanup  time.Duration
+}
+
+type bucket struct {
+	tokens    int
+	lastCheck time.Time
+}
+
+// NewRateLimiter creates a new rate limiter
+func NewRateLimiter(capacity int, rate time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		buckets:  make(map[string]*bucket),
+		capacity: capacity,
+		rate:     rate,
+		cleanup:  5 * time.Minute,
+	}
+
+	// Start cleanup goroutine
+	go rl.cleanupLoop()
+
+	return rl
+}
+
+// Allow checks if request is allowed
+func (rl *RateLimiter) Allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+
+	b, exists := rl.buckets[key]
+	if !exists {
+		rl.buckets[key] = &bucket{
+			tokens:    rl.capacity - 1,
+			lastCheck: now,
+		}
+		return true
+	}
+
+	// Calculate tokens to add based on elapsed time
+	elapsed := now.Sub(b.lastCheck)
+	tokensToAdd := int(elapsed / rl.rate)
+
+	b.tokens += tokensToAdd
+	if b.tokens > rl.capacity {
+		b.tokens = rl.capacity
+	}
+
+	b.lastCheck = now
+
+	if b.tokens > 0 {
+		b.tokens--
+		return true
+	}
+
+	return false
+}
+
+// cleanupLoop removes old buckets
+func (rl *RateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(rl.cleanup)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for key, b := range rl.buckets {
+			if now.Sub(b.lastCheck) > rl.cleanup {
+				delete(rl.buckets, key)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+// RateLimit middleware provides rate limiting per IP
+func RateLimit(conf *config.Config) gin.HandlerFunc {
+	// Create rate limiter: 100 requests per minute
+	limiter := NewRateLimiter(100, time.Minute/100)
+
+	return func(c *gin.Context) {
+		// Use client IP as key
+		key := c.ClientIP()
+
+		if !limiter.Allow(key) {
+			resp.Fail(c.Writer, resp.TooManyRequests("Rate limit exceeded"))
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RateLimitByUser middleware provides rate limiting per user
+func RateLimitByUser(capacity int, window time.Duration) gin.HandlerFunc {
+	limiter := NewRateLimiter(capacity, window/time.Duration(capacity))
+
+	return func(c *gin.Context) {
+		// Get user ID from context
+		userID, exists := c.Get("user_id")
+		if !exists {
+			// No user ID, skip rate limiting
+			c.Next()
+			return
+		}
+
+		key := userID.(string)
+
+		if !limiter.Allow(key) {
+			resp.Fail(c.Writer, resp.TooManyRequests("Rate limit exceeded"))
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

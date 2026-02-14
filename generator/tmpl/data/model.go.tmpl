@@ -1,0 +1,20 @@
+package model
+
+import (
+	"time"
+)
+
+// Example represents an example model
+type Example struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+// ExampleResponse represents an example response
+type ExampleResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

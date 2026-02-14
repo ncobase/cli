@@ -1,0 +1,134 @@
+package middleware
+
+import (
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+// SecurityHeadersConfig holds security headers configuration
+type SecurityHeadersConfig struct {
+	ContentSecurityPolicy     string            `json:"content_security_policy"`
+	StrictTransportSecurity   string            `json:"strict_transport_security"`
+	XFrameOptions             string            `json:"x_frame_options"`
+	XContentTypeOptions       string            `json:"x_content_type_options"`
+	XSSProtection             string            `json:"xss_protection"`
+	ReferrerPolicy            string            `json:"referrer_policy"`
+	PermissionsPolicy         string            `json:"permissions_policy"`
+	CrossOriginEmbedderPolicy string            `json:"cross_origin_embedder_policy"`
+	CrossOriginResourcePolicy string            `json:"cross_origin_resource_policy"`
+	CrossOriginOpenerPolicy   string            `json:"cross_origin_opener_policy"`
+	CustomHeaders             map[string]string `json:"custom_headers"`
+	RemoveHeaders             []string          `json:"remove_headers"`
+}
+
+// DefaultSecurityHeadersConfig returns default security headers configuration
+func DefaultSecurityHeadersConfig() *SecurityHeadersConfig {
+	return &SecurityHeadersConfig{
+		ContentSecurityPolicy: strings.Join([]string{
+			"default-src 'self'",
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+			"style-src 'self' 'unsafe-inline'",
+			"img-src 'self' data: https:",
+			"font-src 'self' data:",
+			"connect-src 'self'",
+			"frame-ancestors 'none'",
+			"base-uri 'self'",
+			"form-action 'self'",
+			"object-src 'none'",
+		}, "; "),
+		StrictTransportSecurity:   "max-age=31536000; includeSubDomains; preload",
+		XFrameOptions:             "DENY",
+		XContentTypeOptions:       "nosniff",
+		XSSProtection:             "1; mode=block",
+		ReferrerPolicy:            "strict-origin-when-cross-origin",
+		PermissionsPolicy:         "camera=(), microphone=(), geolocation=()",
+		CrossOriginEmbedderPolicy: "require-corp",
+		CrossOriginResourcePolicy: "cross-origin",
+		CrossOriginOpenerPolicy:   "same-origin",
+		CustomHeaders: map[string]string{
+			"X-Powered-By":                      "", // Remove this header
+			"Server":                            "", // Remove server information
+			"X-Content-Duration":                "",
+			"X-Robots-Tag":                      "noindex, nofollow, nosnippet, noarchive",
+			"Cache-Control":                     "no-cache, no-store, must-revalidate, private",
+			"Pragma":                            "no-cache",
+			"Expires":                           "0",
+			"X-Download-Options":                "noopen",
+			"X-Permitted-Cross-Domain-Policies": "none",
+		},
+		RemoveHeaders: []string{
+			"X-Powered-By",
+			"Server",
+			"X-AspNet-Version",
+			"X-AspNetMvc-Version",
+		},
+	}
+}
+
+// SecurityHeaders provides security headers middleware
+func SecurityHeaders(config *SecurityHeadersConfig) gin.HandlerFunc {
+	if config == nil {
+		config = DefaultSecurityHeadersConfig()
+	}
+
+	return func(c *gin.Context) {
+		// Process request
+		c.Next()
+
+		// Remove unwanted headers
+		for _, header := range config.RemoveHeaders {
+			c.Writer.Header().Del(header)
+		}
+
+		// Set security headers
+		if config.ContentSecurityPolicy != "" {
+			c.Writer.Header().Set("Content-Security-Policy", config.ContentSecurityPolicy)
+		}
+
+		if config.StrictTransportSecurity != "" {
+			c.Writer.Header().Set("Strict-Transport-Security", config.StrictTransportSecurity)
+		}
+
+		if config.XFrameOptions != "" {
+			c.Writer.Header().Set("X-Frame-Options", config.XFrameOptions)
+		}
+
+		if config.XContentTypeOptions != "" {
+			c.Writer.Header().Set("X-Content-Type-Options", config.XContentTypeOptions)
+		}
+
+		if config.XSSProtection != "" {
+			c.Writer.Header().Set("X-XSS-Protection", config.XSSProtection)
+		}
+
+		if config.ReferrerPolicy != "" {
+			c.Writer.Header().Set("Referrer-Policy", config.ReferrerPolicy)
+		}
+
+		if config.PermissionsPolicy != "" {
+			c.Writer.Header().Set("Permissions-Policy", config.PermissionsPolicy)
+		}
+
+		if config.CrossOriginEmbedderPolicy != "" {
+			c.Writer.Header().Set("Cross-Origin-Embedder-Policy", config.CrossOriginEmbedderPolicy)
+		}
+
+		if config.CrossOriginResourcePolicy != "" {
+			c.Writer.Header().Set("Cross-Origin-Resource-Policy", config.CrossOriginResourcePolicy)
+		}
+
+		if config.CrossOriginOpenerPolicy != "" {
+			c.Writer.Header().Set("Cross-Origin-Opener-Policy", config.CrossOriginOpenerPolicy)
+		}
+
+		// Set custom headers
+		for name, value := range config.CustomHeaders {
+			if value == "" {
+				c.Writer.Header().Del(name)
+			} else {
+				c.Writer.Header().Set(name, value)
+			}
+		}
+	}
+}
