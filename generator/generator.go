@@ -43,9 +43,11 @@ type Options struct {
 	UseGorm  bool // Use GORM for SQL databases
 
 	// Generation options
-	WithCmd  bool   // Generate cmd directory with main.go
-	WithTest bool   // Generate test files (unit, integration, e2e)
-	Group    string // Optional domain group name
+	WithCmd     bool   // Generate cmd directory with main.go
+	WithTest    bool   // Generate test files (unit, integration, e2e)
+	WithGRPC    bool   // Generate gRPC service support
+	WithTracing bool   // Generate OpenTelemetry tracing support
+	Group       string // Optional domain group name
 
 	// Standalone mode (set by init command)
 	Standalone bool // Generate as standalone application
@@ -192,6 +194,8 @@ func Generate(opts *Options) error {
 			UseGorm:       opts.UseGorm,
 			WithTest:      opts.WithTest,
 			WithCmd:       true, // Standalone always includes cmd
+			WithGRPC:      opts.WithGRPC,
+			WithTracing:   opts.WithTracing,
 			Standalone:    opts.Standalone,
 			Group:         opts.Group,
 			ExtType:       extType,
@@ -268,6 +272,8 @@ func Generate(opts *Options) error {
 		UseGorm:       opts.UseGorm,
 		WithTest:      opts.WithTest,
 		WithCmd:       opts.WithCmd,
+		WithGRPC:      opts.WithGRPC,
+		WithTracing:   opts.WithTracing,
 		Standalone:    opts.Standalone,
 		Group:         opts.Group,
 		ExtType:       extType,
@@ -555,6 +561,15 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		return fmt.Errorf("failed to render rest.go: %w", err)
 	}
 
+	// gRPC server (if enabled)
+	if data.WithGRPC {
+		if content, err := registry.RenderGRPCServer(tmplData); err == nil {
+			files["internal/server/grpc.go"] = content
+		} else {
+			return fmt.Errorf("failed to render grpc.go: %w", err)
+		}
+	}
+
 	// Config layer
 	if content, err := registry.RenderConfig(tmplData); err == nil {
 		files["internal/config/config.go"] = content
@@ -621,10 +636,19 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		return fmt.Errorf("failed to render CORS middleware: %w", err)
 	}
 
-	if content, err := registry.RenderMiddlewareTrace(tmplData); err == nil {
-		files["internal/middleware/trace.go"] = content
-	} else {
-		return fmt.Errorf("failed to render Trace middleware: %w", err)
+	// Trace middleware (only if tracing is enabled)
+	if data.WithTracing {
+		if content, err := registry.RenderMiddlewareTrace(tmplData); err == nil {
+			files["internal/middleware/trace.go"] = content
+		} else {
+			return fmt.Errorf("failed to render Trace middleware: %w", err)
+		}
+
+		if content, err := registry.RenderMiddlewareUtils(tmplData); err == nil {
+			files["internal/middleware/utils.go"] = content
+		} else {
+			return fmt.Errorf("failed to render middleware utils: %w", err)
+		}
 	}
 
 	if content, err := registry.RenderMiddlewareLogger(tmplData); err == nil {
@@ -643,12 +667,6 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 		files["internal/middleware/client_info.go"] = content
 	} else {
 		return fmt.Errorf("failed to render Client Info middleware: %w", err)
-	}
-
-	if content, err := registry.RenderMiddlewareUtils(tmplData); err == nil {
-		files["internal/middleware/utils.go"] = content
-	} else {
-		return fmt.Errorf("failed to render middleware utils: %w", err)
 	}
 
 	// Add test files if required
@@ -951,7 +969,6 @@ go test ./...
 		fmt.Printf("Warning: failed to create README.md file: %v\n", err)
 		// Just warn, don't stop the process
 	}
-
 
 	// Create Makefile for build support
 	makefilePath := filepath.Join(basePath, "Makefile")

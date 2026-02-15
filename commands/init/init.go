@@ -51,6 +51,8 @@ For creating extensions within an existing project, use 'nco create' instead.`,
 			opts.UseMinio, _ = cmd.Flags().GetBool("use-minio")
 			opts.UseAliyun, _ = cmd.Flags().GetBool("use-aliyun")
 			opts.WithTest, _ = cmd.Flags().GetBool("with-test")
+			opts.WithGRPC, _ = cmd.Flags().GetBool("with-grpc")
+			opts.WithTracing, _ = cmd.Flags().GetBool("with-tracing")
 
 			// Init command always generates cmd directory
 			opts.WithCmd = true
@@ -82,6 +84,10 @@ For creating extensions within an existing project, use 'nco create' instead.`,
 	cmd.Flags().Bool("use-s3", false, "include AWS S3 storage driver")
 	cmd.Flags().Bool("use-minio", false, "include MinIO storage driver")
 	cmd.Flags().Bool("use-aliyun", false, "include Aliyun OSS storage driver")
+
+	// Service options
+	cmd.Flags().Bool("with-grpc", false, "generate gRPC service support")
+	cmd.Flags().Bool("with-tracing", false, "generate OpenTelemetry tracing support")
 
 	// Other options
 	cmd.Flags().Bool("with-test", false, "generate test files (unit, integration, e2e)")

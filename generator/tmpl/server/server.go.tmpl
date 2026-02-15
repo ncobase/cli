@@ -19,6 +19,9 @@ import (
 type Server struct {
 	config  *config.Config
 	handler http.Handler
+{{- if .WithGRPC }}
+	grpcServer *GRPCServer
+{{- end }}
 	cleanup func()
 }
 
@@ -56,9 +59,30 @@ func New(conf *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize HTTP server: %w", err)
 	}
 
+{{- if .WithGRPC }}
+	// Initialize gRPC server if enabled
+	var grpcSrv *GRPCServer
+	if conf.GRPC != nil && conf.GRPC.Enabled {
+		grpcSrv, err = NewGRPCServer(conf.GRPC.Host, conf.GRPC.Port)
+		if err != nil {
+			if cleanupData != nil {
+				cleanupData()
+			}
+			em.Cleanup()
+			return nil, fmt.Errorf("failed to initialize gRPC server: %w", err)
+		}
+
+		// Register example health check (you can add more services here)
+		logger.Info(context.Background(), "gRPC server ready for service registration")
+	}
+{{- end }}
+
 	return &Server{
 		config:  conf,
 		handler: router,
+{{- if .WithGRPC }}
+		grpcServer: grpcSrv,
+{{- end }}
 		cleanup: func() {
 			logger.Debug(context.Background(), "Cleaning up server resources...")
 
@@ -86,3 +110,11 @@ func (s *Server) Cleanup() {
 		s.cleanup()
 	}
 }
+
+{{- if .WithGRPC }}
+
+// GRPCServer returns the gRPC server instance
+func (s *Server) GRPCServer() *GRPCServer {
+	return s.grpcServer
+}
+{{- end }}

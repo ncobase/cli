@@ -13,6 +13,14 @@ server:
   # Application running port
   port: 8080
 
+{{- if .WithGRPC }}
+
+grpc:
+  enabled: true
+  host: 127.0.0.1
+  port: 9090
+{{- end }}
+
 {{- if ne .DBDriver "" }}
 
 data:
@@ -116,6 +124,17 @@ auth:
     - /token-status
     - /static/*
     - "*swagger*"
+
+{{- if .WithTracing }}
+
+observes:
+  # OpenTelemetry tracing
+  tracer:
+    endpoint: localhost:4317  # OTLP gRPC endpoint
+  # Sentry error tracking (optional)
+  # sentry:
+  #   endpoint: https://your-sentry-dsn@sentry.io/project-id
+{{- end }}
 
 logger:
   # Log level (1:fatal, 2:error, 3:warn, 4:info, 5:debug)

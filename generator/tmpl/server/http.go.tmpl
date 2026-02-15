@@ -10,6 +10,9 @@ import (
 
 	"{{ .PackagePath }}/handler"
 	appConfig "{{ .PackagePath }}/internal/config"
+{{- if .WithTracing }}
+	"{{ .PackagePath }}/internal/middleware"
+{{- end }}
 )
 
 // ginServer creates and initializes the Gin engine
@@ -26,6 +29,11 @@ func ginServer(conf *config.Config, h handler.Interface) (*gin.Engine, error) {
 
 	// Recovery middleware
 	engine.Use(gin.Recovery())
+
+{{- if .WithTracing }}
+	// Trace middleware for OpenTelemetry tracing
+	engine.Use(middleware.Trace)
+{{- end }}
 
 	// Register API routes
 	registerRest(engine, conf, h)

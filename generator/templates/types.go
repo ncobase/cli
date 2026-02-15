@@ -11,6 +11,8 @@ type Data struct {
 	UseGorm     bool   // Whether to use GORM
 	WithCmd     bool   // Whether to generate cmd directory with main.go
 	WithTest    bool   // Whether to generate test files
+	WithGRPC    bool   // Whether to generate gRPC support
+	WithTracing bool   // Whether to generate tracing support
 	Standalone  bool   // Whether to generate as standalone app without extension structure
 	Group       string // Optional group name
 	ExtType     string // Extension type in belongs domain path (core/business/plugin/custom)

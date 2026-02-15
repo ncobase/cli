@@ -62,7 +62,7 @@ func NewLoader() (*Loader, error) {
 }
 
 // Render renders a template with the given data
-func (l *Loader) Render(name string, data interface{}) (string, error) {
+func (l *Loader) Render(name string, data any) (string, error) {
 	var buf strings.Builder
 
 	tmpl := l.templates.Lookup(name)
@@ -78,7 +78,7 @@ func (l *Loader) Render(name string, data interface{}) (string, error) {
 }
 
 // MustRender renders a template and panics on error
-func (l *Loader) MustRender(name string, data interface{}) string {
+func (l *Loader) MustRender(name string, data any) string {
 	result, err := l.Render(name, data)
 	if err != nil {
 		panic(err)
