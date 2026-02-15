@@ -20,6 +20,8 @@ A powerful scaffolding tool for building Go applications with the [ncore](https:
 - 🔐 **Security** - JWT authentication, RBAC templates
 - 📡 **Real-time** - WebSocket and notification support
 - 📤 **File Upload** - Storage abstraction (Local, S3, MinIO, Aliyun OSS)
+- 🔄 **gRPC Support** - Built-in gRPC server with health checks and reflection
+- 📊 **Distributed Tracing** - OpenTelemetry integration for observability
 
 ## Installation
 
@@ -48,13 +50,15 @@ go build -o nco cmd/nco/main.go
 # Basic app
 nco init myapp
 
-# Full-featured microservice
+# Full-featured microservice with gRPC and tracing
 nco init myapp \
   --db postgres \
   --use-ent \
   --use-redis \
   --use-kafka \
   --use-s3 \
+  --with-grpc \
+  --with-tracing \
   --with-test
 
 cd myapp && make run
@@ -81,6 +85,7 @@ nco init <name> [flags]
 | **Cache/Search**  | `--use-redis`<br>`--use-elastic`<br>`--use-opensearch`<br>`--use-meilisearch` | Caching and search engines              |
 | **Message Queue** | `--use-kafka`<br>`--use-rabbitmq`                                             | Messaging systems                       |
 | **Storage**       | `--use-s3`<br>`--use-minio`<br>`--use-aliyun`                                 | Object storage                          |
+| **Services**      | `--with-grpc`<br>`--with-tracing`                                             | gRPC server<br>OpenTelemetry tracing    |
 | **Other**         | `--with-test`<br>`-m, --module`                                               | Generate tests<br>Custom module name    |
 
 **Examples:**
@@ -96,6 +101,8 @@ nco init orders \
   --use-redis \
   --use-kafka \
   --use-s3 \
+  --with-grpc \
+  --with-tracing \
   --with-test
 
 # Data service with MongoDB
@@ -218,6 +225,12 @@ server:
   # Application running port
   port: 8080
 
+# gRPC server (generated with --with-grpc)
+grpc:
+  enabled: true
+  host: 127.0.0.1
+  port: 9090
+
 data:
   database:
     # Global configuration
@@ -270,6 +283,14 @@ auth:
     - /health
     - /login
     - "*swagger*"
+
+# OpenTelemetry tracing (generated with --with-tracing)
+observes:
+  tracer:
+    endpoint: localhost:4317 # OTLP gRPC endpoint
+  # Optional: Sentry error tracking
+  # sentry:
+  #   endpoint: https://your-sentry-dsn@sentry.io/project-id
 
 logger:
   level: 5 # 1:fatal, 2:error, 3:warn, 4:info, 5:debug
@@ -373,6 +394,45 @@ nco init chat \
   --use-rabbitmq
 ```
 
+### gRPC Microservice
+
+```bash
+nco init grpc-service \
+  --db postgres \
+  --use-ent \
+  --use-redis \
+  --with-grpc \
+  --with-tracing \
+  --with-test
+
+# Starts HTTP on :8080 and gRPC on :9090
+# OpenTelemetry traces exported to localhost:4317
+```
+
+**Features:**
+
+- ✅ gRPC server with health checks and reflection
+- ✅ HTTP and gRPC running concurrently
+- ✅ Distributed tracing across both protocols
+- ✅ Automatic service registration ready
+
+### Observable Microservice
+
+```bash
+nco init observable-api \
+  --db postgres \
+  --use-ent \
+  --use-redis \
+  --use-kafka \
+  --with-tracing \
+  --with-test
+
+# Full observability stack:
+# - OpenTelemetry traces (OTLP)
+# - Structured logging with trace IDs
+# - HTTP request tracing
+```
+
 ### Modular Application (with Extensions)
 
 ```bash
@@ -411,6 +471,111 @@ nco create plugin analytics --use-mongo
 | Redis         | `--use-redis`              | Native | Cache/Queue       |
 | Elasticsearch | `--use-elastic`            | Native | Search            |
 | Neo4j         | `--db neo4j`               | Native | Graph database    |
+
+## gRPC & Observability
+
+### gRPC Server (`--with-grpc`)
+
+When enabled, generates a production-ready gRPC server:
+
+**Features:**
+
+- ✅ **Health Checks** - gRPC Health Checking Protocol
+- ✅ **Reflection** - Server reflection for debugging
+- ✅ **Concurrent** - Runs alongside HTTP server
+- ✅ **Graceful Shutdown** - Coordinated with HTTP server
+- ✅ **Interceptors** - Logging and tracing built-in
+
+**Generated Structure:**
+
+```text
+internal/server/
+├── server.go  # Initializes both HTTP and gRPC
+├── http.go    # HTTP server (Gin)
+├── grpc.go    # gRPC server wrapper
+└── rest.go    # REST routes
+```
+
+**Configuration:**
+
+```yaml
+grpc:
+  enabled: true
+  host: 127.0.0.1
+  port: 9090
+```
+
+**Usage:**
+
+```bash
+# Start server (both HTTP and gRPC)
+make run
+
+# HTTP: http://localhost:8080
+# gRPC: localhost:9090
+
+# Test with grpcurl
+grpcurl -plaintext localhost:9090 list
+grpcurl -plaintext localhost:9090 grpc.health.v1.Health/Check
+```
+
+### Distributed Tracing (`--with-tracing`)
+
+OpenTelemetry integration for full observability:
+
+**Features:**
+
+- ✅ **OTLP Export** - gRPC exporter to collector
+- ✅ **W3C Trace Context** - Standard propagation
+- ✅ **Automatic Spans** - HTTP requests auto-traced
+- ✅ **Trace IDs** - Injected into logs and responses
+- ✅ **Service Metadata** - Name, version, environment
+
+**Generated Files:**
+
+```text
+internal/middleware/
+├── trace.go   # OpenTelemetry middleware
+└── utils.go   # Helper functions
+
+cmd/myapp/main.go  # Tracer initialization
+```
+
+**Configuration:**
+
+```yaml
+observes:
+  tracer:
+    endpoint: localhost:4317 # OTLP gRPC endpoint
+```
+
+**Automatic Trace Context:**
+
+```go
+// Every request automatically:
+// 1. Creates a span
+// 2. Propagates trace context
+// 3. Adds trace ID to logger
+// 4. Exports to OTLP collector
+
+// Response headers include:
+// X-Trace-Id: 1234567890abcdef
+```
+
+**Integration with Observability Stack:**
+
+```bash
+# Jaeger (all-in-one)
+docker run -d --name jaeger \
+  -p 4317:4317 \
+  -p 16686:16686 \
+  jaegertracing/all-in-one:latest
+
+# Access Jaeger UI
+open http://localhost:16686
+
+# Or use Tempo, Zipkin, etc.
+```
 
 ## Template Capabilities
 
