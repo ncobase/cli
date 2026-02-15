@@ -16,6 +16,9 @@ import (
 	"{{ .PackagePath }}/internal/version"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
+{{- if .WithTracing }}
+	"github.com/ncobase/ncore/logging/observes"
+{{- end }}
 {{- if .DBDriver }}
 	{{ driverImport .DBDriver }}
 {{- end }}
@@ -59,6 +62,12 @@ func main() {
 	cleanupLogger := initializeLogger(conf)
 	defer cleanupLogger()
 
+{{- if .WithTracing }}
+	// Initialize OpenTelemetry tracer
+	cleanupTracer := initializeTracer(conf)
+	defer cleanupTracer()
+{{- end }}
+
 	logger.Infof(context.Background(), "Starting %s", conf.AppName)
 
 	if err := runServer(conf); err != nil {
@@ -66,7 +75,7 @@ func main() {
 	}
 }
 
-// runServer creates and runs HTTP server
+// runServer creates and runs HTTP{{- if .WithGRPC }} and gRPC{{- end }} server(s)
 func runServer(conf *config.Config) error {
 	// Create server
 	s, err := server.New(conf)
@@ -91,16 +100,29 @@ func runServer(conf *config.Config) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in goroutine
+	// Start HTTP server in goroutine
 	errChan := make(chan error, 1)
 	go func() {
 		logger.Infof(context.Background(), "Listening and serving HTTP on: %s", srv.Addr)
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errChan <- fmt.Errorf("server error: %w", err)
+			errChan <- fmt.Errorf("HTTP server error: %w", err)
 		}
 	}()
 
-	return gracefulShutdown(srv, errChan)
+{{- if .WithGRPC }}
+	// Start gRPC server if available
+	var grpcServer *server.GRPCServer
+	if s.GRPCServer() != nil {
+		grpcServer = s.GRPCServer()
+		go func() {
+			if err := grpcServer.Start(); err != nil {
+				errChan <- fmt.Errorf("gRPC server error: %w", err)
+			}
+		}()
+	}
+{{- end }}
+
+	return gracefulShutdown(srv{{- if .WithGRPC }}, grpcServer{{- end }}, errChan)
 }
 
 // createListener creates network listener
@@ -142,8 +164,8 @@ func initializeLogger(conf *config.Config) func() {
 	return cleanup
 }
 
-// gracefulShutdown gracefully shuts down the server
-func gracefulShutdown(srv *http.Server, errChan chan error) error {
+// gracefulShutdown gracefully shuts down the server(s)
+func gracefulShutdown(srv *http.Server{{- if .WithGRPC }}, grpcServer *server.GRPCServer{{- end }}, errChan chan error) error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -157,11 +179,55 @@ func gracefulShutdown(srv *http.Server, errChan chan error) error {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
+{{- if .WithGRPC }}
+		// Stop gRPC server
+		if grpcServer != nil {
+			grpcServer.Stop()
+		}
+{{- end }}
+
+		// Shutdown HTTP server
 		if err := srv.Shutdown(ctx); err != nil {
-			return fmt.Errorf("server forced to shutdown: %w", err)
+			return fmt.Errorf("HTTP server forced to shutdown: %w", err)
 		}
 
 		logger.Info(context.Background(), "Server shutdown completed")
 		return nil
 	}
 }
+
+{{- if .WithTracing }}
+
+// initializeTracer initializes OpenTelemetry tracer
+func initializeTracer(conf *config.Config) func() {
+	if conf.Observes == nil || conf.Observes.Tracer == nil {
+		logger.Warn(context.Background(), "Tracer configuration not found, skipping tracer initialization")
+		return func() {}
+	}
+
+	opt := &observes.TracerOption{
+		URL:                conf.Observes.Tracer.Endpoint,
+		Name:               conf.AppName,
+		Version:            version.GetVersionInfo().Version,
+		Branch:             version.GetVersionInfo().Branch,
+		Revision:           version.GetVersionInfo().Revision,
+		Environment:        conf.Environment,
+		SamplingRate:       1.0,  // Sample all traces in development
+		MaxAttributes:      100,
+		BatchTimeout:       5 * time.Second,
+		ExportTimeout:      10 * time.Second,
+		MaxExportBatchSize: 512,
+	}
+
+	if err := observes.NewTracer(opt); err != nil {
+		logger.Fatalf(context.Background(), "Failed to initialize tracer: %+v", err)
+	}
+
+	logger.Infof(context.Background(), "OpenTelemetry tracer initialized with endpoint: %s", opt.URL)
+
+	return func() {
+		logger.Info(context.Background(), "Shutting down tracer...")
+		// Tracer shutdown is handled by the SDK
+	}
+}
+{{- end }}

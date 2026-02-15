@@ -15,7 +15,7 @@ func EnsureDir(dir string) error {
 }
 
 // WriteTemplateFile writes content to file
-func WriteTemplateFile(path, content string, data interface{}) error {
+func WriteTemplateFile(path, content string, data any) error {
 	dir := filepath.Dir(path)
 	if err := EnsureDir(dir); err != nil {
 		return err

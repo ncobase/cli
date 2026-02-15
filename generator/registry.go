@@ -35,6 +35,8 @@ type TemplateData struct {
 	UseGorm     bool   // Whether to use GORM
 	WithCmd     bool   // Whether to generate cmd directory with main.go
 	WithTest    bool   // Whether to generate test files
+	WithGRPC    bool   // Whether to generate gRPC support
+	WithTracing bool   // Whether to generate tracing support
 	Standalone  bool   // Whether to generate as standalone app
 	Group       string // Optional group name
 	ExtType     string // Extension type in domain path
@@ -196,6 +198,14 @@ func (r *Registry) RenderMiddlewareUtils(data *TemplateData) (string, error) {
 	return r.loader.Render("middleware/utils.go", data)
 }
 
+// RenderGRPCServer renders the gRPC server template
+func (r *Registry) RenderGRPCServer(data *TemplateData) (string, error) {
+	if !data.WithGRPC {
+		return "", fmt.Errorf("gRPC support not enabled")
+	}
+	return r.loader.Render("server/grpc.go", data)
+}
+
 // NewTemplateData creates template data from templates.Data
 func NewTemplateData(d *templates.Data) *TemplateData {
 	return &TemplateData{
@@ -208,6 +218,8 @@ func NewTemplateData(d *templates.Data) *TemplateData {
 		UseGorm:       d.UseGorm,
 		WithCmd:       d.WithCmd,
 		WithTest:      d.WithTest,
+		WithGRPC:      d.WithGRPC,
+		WithTracing:   d.WithTracing,
 		Standalone:    d.Standalone,
 		Group:         d.Group,
 		ExtType:       d.ExtType,

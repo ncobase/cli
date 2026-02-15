@@ -63,9 +63,21 @@ For creating standalone applications, use 'nco init' instead.`,
 				opts.UseMongo, _ = cmd.Flags().GetBool("use-mongo")
 				opts.UseEnt, _ = cmd.Flags().GetBool("use-ent")
 				opts.UseGorm, _ = cmd.Flags().GetBool("use-gorm")
-				opts.WithTest, _ = cmd.Flags().GetBool("with-test")
-				opts.Group, _ = cmd.Flags().GetString("group")
+				opts.DBDriver, _ = cmd.Flags().GetString("db")
+				opts.UseRedis, _ = cmd.Flags().GetBool("use-redis")
+				opts.UseElastic, _ = cmd.Flags().GetBool("use-elastic")
+				opts.UseOpenSearch, _ = cmd.Flags().GetBool("use-opensearch")
+				opts.UseMeili, _ = cmd.Flags().GetBool("use-meilisearch")
+				opts.UseKafka, _ = cmd.Flags().GetBool("use-kafka")
+				opts.UseRabbitMQ, _ = cmd.Flags().GetBool("use-rabbitmq")
+				opts.UseS3Storage, _ = cmd.Flags().GetBool("use-s3")
+				opts.UseMinio, _ = cmd.Flags().GetBool("use-minio")
+				opts.UseAliyun, _ = cmd.Flags().GetBool("use-aliyun")
 				opts.WithCmd, _ = cmd.Flags().GetBool("with-cmd")
+				opts.WithTest, _ = cmd.Flags().GetBool("with-test")
+				opts.WithGRPC, _ = cmd.Flags().GetBool("with-grpc")
+				opts.WithTracing, _ = cmd.Flags().GetBool("with-tracing")
+				opts.Group, _ = cmd.Flags().GetString("group")
 
 				return generator.Generate(opts)
 			}
@@ -98,8 +110,20 @@ For creating standalone applications, use 'nco init' instead.`,
 			opts.UseMongo, _ = cmd.Flags().GetBool("use-mongo")
 			opts.UseEnt, _ = cmd.Flags().GetBool("use-ent")
 			opts.UseGorm, _ = cmd.Flags().GetBool("use-gorm")
+			opts.DBDriver, _ = cmd.Flags().GetString("db")
+			opts.UseRedis, _ = cmd.Flags().GetBool("use-redis")
+			opts.UseElastic, _ = cmd.Flags().GetBool("use-elastic")
+			opts.UseOpenSearch, _ = cmd.Flags().GetBool("use-opensearch")
+			opts.UseMeili, _ = cmd.Flags().GetBool("use-meilisearch")
+			opts.UseKafka, _ = cmd.Flags().GetBool("use-kafka")
+			opts.UseRabbitMQ, _ = cmd.Flags().GetBool("use-rabbitmq")
+			opts.UseS3Storage, _ = cmd.Flags().GetBool("use-s3")
+			opts.UseMinio, _ = cmd.Flags().GetBool("use-minio")
+			opts.UseAliyun, _ = cmd.Flags().GetBool("use-aliyun")
 			opts.WithCmd, _ = cmd.Flags().GetBool("with-cmd")
 			opts.WithTest, _ = cmd.Flags().GetBool("with-test")
+			opts.WithGRPC, _ = cmd.Flags().GetBool("with-grpc")
+			opts.WithTracing, _ = cmd.Flags().GetBool("with-tracing")
 			opts.Group, _ = cmd.Flags().GetString("group")
 
 			return generator.Generate(opts)
@@ -116,9 +140,33 @@ For creating standalone applications, use 'nco init' instead.`,
 	// add flags
 	cmd.Flags().StringP("path", "p", "", "output path (defaults to current directory)")
 	cmd.Flags().StringP("module", "m", "", "Go module name (defaults to current module)")
-	cmd.Flags().Bool("use-mongo", false, "use MongoDB")
-	cmd.Flags().Bool("use-ent", false, "use Ent as ORM")
-	cmd.Flags().Bool("use-gorm", false, "use GORM as ORM")
+
+	// ORM options
+	cmd.Flags().Bool("use-mongo", false, "use MongoDB as database")
+	cmd.Flags().Bool("use-ent", false, "use Ent as ORM (for SQL databases)")
+	cmd.Flags().Bool("use-gorm", false, "use GORM as ORM (for SQL databases)")
+	cmd.Flags().String("db", "", "database driver: postgres, mysql, sqlite, mongodb, neo4j")
+
+	// Data source drivers
+	cmd.Flags().Bool("use-redis", false, "include Redis driver for caching/queuing")
+	cmd.Flags().Bool("use-elastic", false, "include Elasticsearch driver for search")
+	cmd.Flags().Bool("use-opensearch", false, "include OpenSearch driver for search")
+	cmd.Flags().Bool("use-meilisearch", false, "include Meilisearch driver for search")
+
+	// Message queue drivers
+	cmd.Flags().Bool("use-kafka", false, "include Kafka driver for messaging")
+	cmd.Flags().Bool("use-rabbitmq", false, "include RabbitMQ driver for messaging")
+
+	// Storage drivers
+	cmd.Flags().Bool("use-s3", false, "include AWS S3 storage driver")
+	cmd.Flags().Bool("use-minio", false, "include MinIO storage driver")
+	cmd.Flags().Bool("use-aliyun", false, "include Aliyun OSS storage driver")
+
+	// Service options
+	cmd.Flags().Bool("with-grpc", false, "generate gRPC service support")
+	cmd.Flags().Bool("with-tracing", false, "generate OpenTelemetry tracing support")
+
+	// Other options
 	cmd.Flags().Bool("with-test", false, "generate test files")
 	cmd.Flags().Bool("with-cmd", false, "generate cmd directory with main.go for testing")
 	cmd.Flags().String("group", "", "optional domain group name")

@@ -36,6 +36,8 @@ func newCoreCommand() *cobra.Command {
 			opts.UseAliyun, _ = cmd.Flags().GetBool("use-aliyun")
 			opts.WithCmd, _ = cmd.Flags().GetBool("with-cmd")
 			opts.WithTest, _ = cmd.Flags().GetBool("with-test")
+			opts.WithGRPC, _ = cmd.Flags().GetBool("with-grpc")
+			opts.WithTracing, _ = cmd.Flags().GetBool("with-tracing")
 			opts.Standalone, _ = cmd.Flags().GetBool("standalone")
 			opts.Group, _ = cmd.Flags().GetString("group")
 
@@ -61,6 +63,8 @@ func newCoreCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.UseAliyun, "use-aliyun", false, "include Aliyun OSS storage driver")
 	cmd.Flags().BoolVar(&opts.WithCmd, "with-cmd", false, "generate cmd directory with main.go")
 	cmd.Flags().BoolVar(&opts.WithTest, "with-test", false, "generate test files")
+	cmd.Flags().BoolVar(&opts.WithGRPC, "with-grpc", false, "generate gRPC service support")
+	cmd.Flags().BoolVar(&opts.WithTracing, "with-tracing", false, "generate OpenTelemetry tracing support")
 	cmd.Flags().BoolVar(&opts.Standalone, "standalone", false, "generate as standalone app without extension structure")
 	cmd.Flags().StringVar(&opts.Group, "group", "", "belongs domain group (optional)")
 

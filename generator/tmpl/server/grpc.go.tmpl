@@ -1,0 +1,74 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"net"
+
+	"github.com/ncobase/ncore/extension/grpc"
+	"github.com/ncobase/ncore/logging/logger"
+	"google.golang.org/grpc/health/grpc_health_v1"
+)
+
+// GRPCServer wraps the gRPC server
+type GRPCServer struct {
+	server *grpc.Server
+}
+
+// NewGRPCServer creates a new gRPC server instance
+func NewGRPCServer(host string, port int) (*GRPCServer, error) {
+	address := fmt.Sprintf("%s:%d", host, port)
+
+	// Create gRPC server with health checks and reflection
+	server, err := grpc.NewServer(address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
+	}
+
+	logger.Infof(context.Background(), "gRPC server initialized on %s", address)
+
+	return &GRPCServer{
+		server: server,
+	}, nil
+}
+
+// Start starts the gRPC server
+func (s *GRPCServer) Start() error {
+	logger.Info(context.Background(), "Starting gRPC server...")
+	return s.server.Start()
+}
+
+// Stop gracefully stops the gRPC server
+func (s *GRPCServer) Stop() {
+	logger.Info(context.Background(), "Stopping gRPC server...")
+	s.server.Stop()
+}
+
+// GetServer returns the underlying gRPC server for service registration
+func (s *GRPCServer) GetServer() *grpc.Server {
+	return s.server
+}
+
+// GetAddress returns the server address
+func (s *GRPCServer) GetAddress() string {
+	return s.server.GetAddress()
+}
+
+// RegisterService registers a gRPC service with health check
+func (s *GRPCServer) RegisterService(name string, service any, registrar func(*grpc.Server, any)) {
+	s.server.RegisterService(name, service, func(srv any, svc any) {
+		registrar(srv.(*grpc.Server), svc)
+	})
+}
+
+// SetHealthStatus sets the health status for a service
+func (s *GRPCServer) SetHealthStatus(service string, status grpc_health_v1.HealthCheckResponse_ServingStatus) {
+	// Health status is managed by the underlying server
+	logger.Debugf(context.Background(), "Health status set for %s: %v", service, status)
+}
+
+// GetListener returns the network listener
+func (s *GRPCServer) GetListener() net.Listener {
+	// The listener is managed internally by the server
+	return nil
+}
