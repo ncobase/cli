@@ -1,11 +1,23 @@
 package config
 
 import (
-	"github.com/ncobase/ncore/config"
+	nconfig "github.com/ncobase/ncore/config"
 )
 
+// Config aliases
+type (
+	Config = nconfig.Config
+	Server = nconfig.Server
+	Data   = nconfig.Data
+)
+
+// Load loads configuration from file
+func Load(path string) (*Config, error) {
+	return nconfig.Load(path)
+}
+
 // IsProd returns true if the current environment is production
-func IsProd(c *config.Config) bool {
+func IsProd(c *Config) bool {
 	if c == nil {
 		return false
 	}
@@ -13,7 +25,7 @@ func IsProd(c *config.Config) bool {
 }
 
 // IsDev returns true if the current environment is development
-func IsDev(c *config.Config) bool {
+func IsDev(c *Config) bool {
 	if c == nil {
 		return true
 	}
