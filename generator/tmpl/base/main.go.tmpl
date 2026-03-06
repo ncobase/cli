@@ -17,9 +17,7 @@ import (
 	"{{ .PackagePath }}/internal/version"
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/logging/logger"
-{{- if .WithTracing }}
 	"github.com/ncobase/ncore/logging/observes"
-{{- end }}
 {{- if .DBDriver }}
 	_ "github.com/ncobase/ncore/data/{{ .DBDriver }}"
 {{- end }}
