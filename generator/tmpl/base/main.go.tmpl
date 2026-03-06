@@ -212,10 +212,11 @@ func initSentry(conf *config.Config, appName string) {
 	if conf.Observes == nil || conf.Observes.Sentry == nil || conf.Observes.Sentry.Endpoint == "" {
 		return
 	}
-	opt := &observes.SentryOption{
-		DSN:         conf.Observes.Sentry.Endpoint,
-		Environment: conf.Environment,
+	opt := &observes.SentryOptions{
+		Dsn:         conf.Observes.Sentry.Endpoint,
+		Name:        appName,
 		Release:     version.GetVersionInfo().Version,
+		Environment: conf.Environment,
 	}
 	if err := observes.NewSentry(opt); err != nil {
 		logger.Fatalf(context.Background(), "Failed to initialize sentry: %+v", err)
