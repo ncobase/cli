@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,55 +21,50 @@ import (
 	"github.com/ncobase/ncore/logging/observes"
 {{- end }}
 {{- if .DBDriver }}
-	{{ driverImport .DBDriver }}
+	_ "github.com/ncobase/ncore/data/{{ .DBDriver }}"
 {{- end }}
 {{- if .UseRedis }}
-	{{ conditionalImport .UseRedis "github.com/ncobase/ncore/data/redis" }}
+	_ "github.com/ncobase/ncore/data/redis"
 {{- end }}
 {{- if .UseElastic }}
-	{{ conditionalImport .UseElastic "github.com/ncobase/ncore/data/elasticsearch" }}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
 {{- end }}
 {{- if .UseOpenSearch }}
-	{{ conditionalImport .UseOpenSearch "github.com/ncobase/ncore/data/opensearch" }}
+	_ "github.com/ncobase/ncore/data/opensearch"
 {{- end }}
 {{- if .UseMeili }}
-	{{ conditionalImport .UseMeili "github.com/ncobase/ncore/data/meilisearch" }}
+	_ "github.com/ncobase/ncore/data/meilisearch"
 {{- end }}
 {{- if .UseKafka }}
-	{{ conditionalImport .UseKafka "github.com/ncobase/ncore/data/kafka" }}
+	_ "github.com/ncobase/ncore/data/kafka"
 {{- end }}
 {{- if .UseRabbitMQ }}
-	{{ conditionalImport .UseRabbitMQ "github.com/ncobase/ncore/data/rabbitmq" }}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
 {{- end }}
 )
 
 const (
-	shutdownTimeout = 5 * time.Second // service shutdown timeout
+	shutdownTimeout = 3 * time.Second
 )
 
 func main() {
 	flag.Parse()
-
-	// Handle version flags
 	version.Flags()
 
-	// Load config
 	conf := loadConfig()
-
-	// Set logger version
 	logger.SetVersion(version.GetVersionInfo().Version)
 
-	// Initialize logger
+	appName := strings.ToLower(conf.AppName)
+
+{{- if .WithTracing }}
+	initTracer(conf, appName)
+{{- end }}
+	initSentry(conf, appName)
+
 	cleanupLogger := initializeLogger(conf)
 	defer cleanupLogger()
 
-{{- if .WithTracing }}
-	// Initialize OpenTelemetry tracer
-	cleanupTracer := initializeTracer(conf)
-	defer cleanupTracer()
-{{- end }}
-
-	logger.Infof(context.Background(), "Starting %s", conf.AppName)
+	logger.Infof(context.Background(), "Starting %s", appName)
 
 	if err := runServer(conf); err != nil {
 		logger.Fatalf(context.Background(), "Server error: %v", err)
@@ -198,36 +194,32 @@ func gracefulShutdown(srv *http.Server{{- if .WithGRPC }}, grpcServer *server.GR
 
 {{- if .WithTracing }}
 
-// initializeTracer initializes OpenTelemetry tracer
-func initializeTracer(conf *config.Config) func() {
+func initTracer(conf *config.Config, appName string) {
 	if conf.Observes == nil || conf.Observes.Tracer == nil {
-		logger.Warn(context.Background(), "Tracer configuration not found, skipping tracer initialization")
-		return func() {}
+		return
 	}
-
 	opt := &observes.TracerOption{
-		URL:                conf.Observes.Tracer.Endpoint,
-		Name:               conf.AppName,
-		Version:            version.GetVersionInfo().Version,
-		Branch:             version.GetVersionInfo().Branch,
-		Revision:           version.GetVersionInfo().Revision,
-		Environment:        conf.Environment,
-		SamplingRate:       1.0,  // Sample all traces in development
-		MaxAttributes:      100,
-		BatchTimeout:       5 * time.Second,
-		ExportTimeout:      10 * time.Second,
-		MaxExportBatchSize: 512,
+		URL:         conf.Observes.Tracer.Endpoint,
+		Name:        appName,
+		Version:     version.GetVersionInfo().Version,
+		Environment: conf.Environment,
 	}
-
 	if err := observes.NewTracer(opt); err != nil {
 		logger.Fatalf(context.Background(), "Failed to initialize tracer: %+v", err)
 	}
-
-	logger.Infof(context.Background(), "OpenTelemetry tracer initialized with endpoint: %s", opt.URL)
-
-	return func() {
-		logger.Info(context.Background(), "Shutting down tracer...")
-		// Tracer shutdown is handled by the SDK
-	}
 }
 {{- end }}
+
+func initSentry(conf *config.Config, appName string) {
+	if conf.Observes == nil || conf.Observes.Sentry == nil || conf.Observes.Sentry.Endpoint == "" {
+		return
+	}
+	opt := &observes.SentryOption{
+		DSN:         conf.Observes.Sentry.Endpoint,
+		Environment: conf.Environment,
+		Release:     version.GetVersionInfo().Version,
+	}
+	if err := observes.NewSentry(opt); err != nil {
+		logger.Fatalf(context.Background(), "Failed to initialize sentry: %+v", err)
+	}
+}

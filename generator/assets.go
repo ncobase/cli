@@ -70,6 +70,9 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 	if err := renderFile("server.go", "internal/server/server.go", registry.RenderServer); err != nil {
 		return err
 	}
+	if err := renderFile("exts.go", "internal/server/exts.go", registry.RenderServerExts); err != nil {
+		return err
+	}
 	if err := renderFile("http.go", "internal/server/http.go", registry.RenderHTTP); err != nil {
 		return err
 	}

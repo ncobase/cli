@@ -72,7 +72,12 @@ func (r *Registry) RenderConfig(data *TemplateData) (string, error) {
 
 // RenderServer renders the server.go template
 func (r *Registry) RenderServer(data *TemplateData) (string, error) {
-	return r.loader.Render("server/server.go", data)
+	return r.loader.Render("server/server-ext.go", data)
+}
+
+// RenderServerExts renders the exts.go template
+func (r *Registry) RenderServerExts(data *TemplateData) (string, error) {
+	return r.loader.Render("server/exts.go", data)
 }
 
 // RenderHTTP renders the http.go template

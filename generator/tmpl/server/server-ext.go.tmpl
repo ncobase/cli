@@ -1,0 +1,56 @@
+package server
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	extm "github.com/ncobase/ncore/extension/manager"
+	ext "github.com/ncobase/ncore/extension/types"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"{{ .PackagePath }}/internal/config"
+)
+
+type Server struct {
+	em     ext.ManagerInterface
+	engine *gin.Engine
+}
+
+func New(conf *config.Config) (*Server, error) {
+	em, err := extm.NewManager(conf)
+	if err != nil {
+		return nil, fmt.Errorf("extension manager: %w", err)
+	}
+
+	registerExtensions(em)
+
+	engine := buildEngine(conf)
+	engine.GET("/health", handleHealth)
+	engine.GET("/readiness", handleReadiness)
+	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	em.RegisterRoutes(engine)
+
+	return &Server{em: em, engine: engine}, nil
+}
+
+func (s *Server) Handler() http.Handler { return s.engine }
+func (s *Server) Cleanup()              { s.em.Cleanup() }
+
+func buildEngine(conf *config.Config) *gin.Engine {
+	if conf.IsProd() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	engine := gin.New()
+	engine.Use(gin.Logger(), gin.Recovery())
+	return engine
+}
+
+func handleHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().UTC()})
+}
+
+func handleReadiness(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ready"})
+}
