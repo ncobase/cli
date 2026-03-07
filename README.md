@@ -32,7 +32,7 @@ cd cli && make build
 sudo mv bin/nco /usr/local/bin/
 
 # Quick build
-go build -o nco cmd/nco/main.go
+go build -o nco .
 ```
 
 ## Quick Start

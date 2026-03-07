@@ -32,7 +32,7 @@ cd cli && make build
 sudo mv bin/nco /usr/local/bin/
 
 # 快速构建
-go build -o nco cmd/nco/main.go
+go build -o nco .
 ```
 
 ## 快速开始
