@@ -10,3 +10,9 @@ test-app/
 ncore-app/
 nco-app/
 .DS_Store
+*.log
+*.tmp
+coverage.out
+.env
+.env.*
+!.env.example
