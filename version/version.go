@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -62,7 +63,14 @@ func GetVersionInfo() Info {
 	revision := Revision
 	builtAt := BuiltAt
 
-	// Only attempt to get runtime git info if we're using default values
+	// Try to get runtime git info from build info first (for go install)
+	if version == "0.0.0" || version == "unknown" {
+		if buildVersion := getVersionFromBuildInfo(); buildVersion != "" {
+			version = buildVersion
+		}
+	}
+
+	// Only attempt to get runtime git info if we're using default values and in a git repo
 	if version == "0.0.0" || branch == "unknown" || revision == "unknown" {
 		if isGitAvailable() && isGitRepository() {
 			runtimeBranch, runtimeRevision, runtimeVersion := getRuntimeGitInfo()
@@ -92,6 +100,21 @@ func GetVersionInfo() Info {
 		BuiltAt:   builtAt,
 		GoVersion: runtime.Version(),
 	}
+}
+
+// getVersionFromBuildInfo extracts version from build info (for go install)
+func getVersionFromBuildInfo() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+
+	// Check if this is a versioned module install
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	return ""
 }
 
 // isGitAvailable checks if git command is available
