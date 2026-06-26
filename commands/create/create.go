@@ -1,6 +1,7 @@
 package create
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ncobase/cli/commands/internal/generation"
@@ -25,8 +26,17 @@ Examples:
   nco create core auth
   nco create business crm
   nco create plugin payment`,
-		Args: cobra.RangeArgs(1, 2),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 2 {
+				return fmt.Errorf("create accepts an extension name or type and name")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+
 			var dir, name string
 			opts := generator.DefaultOptions()
 			if len(args) == 1 {
@@ -76,8 +86,17 @@ func newTypedCommand(extType string, aliases []string, short string) *cobra.Comm
 		Use:     extType + " [name]",
 		Aliases: aliases,
 		Short:   short,
-		Args:    cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return fmt.Errorf("%s requires one extension name", extType)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+
 			opts := generator.DefaultOptions()
 			opts.Name = args[0]
 			opts.Type = extType

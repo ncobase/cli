@@ -1,6 +1,8 @@
 package initcmd
 
 import (
+	"fmt"
+
 	"github.com/ncobase/cli/commands/internal/generation"
 	"github.com/ncobase/cli/generator"
 	"github.com/spf13/cobra"
@@ -12,12 +14,21 @@ func NewCommand() *cobra.Command {
 		Short: "Initialize a new standalone application",
 		Long: `Initialize a new standalone application with complete project structure.
 
-		Examples:
+Examples:
   nco init myapp
   nco init myapp --path ./apps --use-ent --db postgres
   nco init myapp --use-redis --use-kafka`,
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return fmt.Errorf("init requires one application name")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+
 			opts := generator.DefaultOptions()
 			opts.Name = args[0]
 			opts.Type = "direct"

@@ -1,6 +1,10 @@
 package initcmd
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
 
 func TestNewCommand_MetadataAndFlags(t *testing.T) {
 	cmd := NewCommand()
@@ -20,5 +24,35 @@ func TestNewCommand_MetadataAndFlags(t *testing.T) {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Fatalf("expected init flag %q to exist", name)
 		}
+	}
+}
+
+func TestNewCommand_NoArgsShowsHelp(t *testing.T) {
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected init help flow to succeed, got error: %v", err)
+	}
+	if !strings.Contains(output.String(), "Usage:") || !strings.Contains(output.String(), "nco init myapp") {
+		t.Fatalf("expected init help output, got %q", output.String())
+	}
+	if strings.Contains(output.String(), "accepts") {
+		t.Fatalf("expected init help instead of raw arg error, got %q", output.String())
+	}
+}
+
+func TestNewCommand_TooManyArgsReturnsFriendlyError(t *testing.T) {
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"one", "two"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected init command to reject extra arguments")
+	}
+	if err.Error() != "init requires one application name" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

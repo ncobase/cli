@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -97,6 +98,66 @@ func TestCreateKnownTypeWithSingleArgumentShowsHelp(t *testing.T) {
 	}
 	if output.Len() == 0 {
 		t.Fatal("expected help output for known type input")
+	}
+}
+
+func TestCreateNoArgsShowsHelp(t *testing.T) {
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected create help flow to succeed, got error: %v", err)
+	}
+	if !strings.Contains(output.String(), "Usage:") || !strings.Contains(output.String(), "nco create core auth") {
+		t.Fatalf("expected create help output, got %q", output.String())
+	}
+	if strings.Contains(output.String(), "accepts") {
+		t.Fatalf("expected create help instead of raw arg error, got %q", output.String())
+	}
+}
+
+func TestCreateTooManyArgsReturnsFriendlyError(t *testing.T) {
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"one", "two", "three"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected create command to reject extra arguments")
+	}
+	if err.Error() != "create accepts an extension name or type and name" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateTypedCommandNoArgsShowsHelp(t *testing.T) {
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"core"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected typed create help flow to succeed, got error: %v", err)
+	}
+	if !strings.Contains(output.String(), "Usage:") || !strings.Contains(output.String(), "core [name]") {
+		t.Fatalf("expected typed create help output, got %q", output.String())
+	}
+	if strings.Contains(output.String(), "accepts") {
+		t.Fatalf("expected typed create help instead of raw arg error, got %q", output.String())
+	}
+}
+
+func TestCreateTypedCommandTooManyArgsReturnsFriendlyError(t *testing.T) {
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"core", "one", "two"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected typed create command to reject extra arguments")
+	}
+	if err.Error() != "core requires one extension name" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
