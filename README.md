@@ -25,17 +25,29 @@ A powerful scaffolding tool for building Go applications with the [ncore](https:
 
 ## Installation
 
+### Install the Released Command
+
 ```bash
-# Official nco command
 go install github.com/ncobase/cli/cmd/nco@latest
+nco version
+```
 
-# From source
+Ensure `$(go env GOPATH)/bin` or `GOBIN` is available in `PATH`.
+
+### Build from Source
+
+```bash
 git clone https://github.com/ncobase/cli.git
-cd cli && make build
-sudo mv bin/nco /usr/local/bin/
+cd cli
+make build
+./bin/nco version
+```
 
-# Quick build
+### Development Build
+
+```bash
 go build -o nco ./cmd/nco
+./nco version
 ```
 
 ## Quick Start
@@ -950,13 +962,6 @@ connectivity checks first; the generated `go.mod` does not require local `replac
 
 **Port conflicts:**
 The server automatically finds available ports if 8080 is busy.
-
-**Version not showing:**
-Always use `make build` instead of `go build` for version injection.
-
-**`go install github.com/ncobase/cli@latest` installs `cli`:**
-The root module path installs a binary named `cli`. Use
-`go install github.com/ncobase/cli/cmd/nco@latest` when you need the `nco` command.
 
 ## Contributing
 

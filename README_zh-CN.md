@@ -25,17 +25,29 @@
 
 ## 安装
 
+### 安装发布版命令
+
 ```bash
-# 官方 nco 命令
 go install github.com/ncobase/cli/cmd/nco@latest
+nco version
+```
 
-# 从源码安装
+请确保 `$(go env GOPATH)/bin` 或 `GOBIN` 已加入 `PATH`。
+
+### 从源码构建
+
+```bash
 git clone https://github.com/ncobase/cli.git
-cd cli && make build
-sudo mv bin/nco /usr/local/bin/
+cd cli
+make build
+./bin/nco version
+```
 
-# 快速构建
+### 开发构建
+
+```bash
 go build -o nco ./cmd/nco
+./nco version
 ```
 
 ## 快速开始
@@ -612,13 +624,6 @@ vim data/repository/repository.go
 
 **端口冲突：**
 如果 8080 端口被占用，服务器会自动寻找可用端口。
-
-**版本信息不显示：**
-始终使用 `make build` 而不是 `go build` 来进行版本注入。
-
-**`go install github.com/ncobase/cli@latest` 安装出 `cli`：**
-根模块路径会安装名为 `cli` 的二进制。需要安装 `nco` 命令时，请使用
-`go install github.com/ncobase/cli/cmd/nco@latest`。
 
 ## 模板能力详解
 
