@@ -5,7 +5,6 @@ func VersionTemplate() string {
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -48,6 +47,7 @@ type Info struct {
 
 func init() {
 	flag.BoolVar(&showVersion, "version", false, "show version information")
+	flag.BoolVar(&showVersion, "v", false, "show version information")
 }
 
 // Flags handle version flags
@@ -185,45 +185,9 @@ func getRuntimeGitInfo() (branch, revision, version string) {
 	return
 }
 
-// String returns a string representation of version information
-// Example: Version: 0.0.0 Branch: main Revision: 1234567 Built At: 2023-01-01T00:00:00Z Go Version: go1.19
-func (i Info) String() string {
-	return fmt.Sprintf("Version: %s Branch: %s Revision: %s Built At: %s Go Version: %s",
-		i.Version, i.Branch, i.Revision, i.BuiltAt, i.GoVersion)
-}
-
-// JSON returns a JSON representation of version information
-// Example:
-//
-//	{
-//	  "version": "0.0.0",
-//	  "branch": "main",
-//	  "revision": "1234567",
-//	  "built_at": "2023-01-01T00:00:00Z",
-//	  "go_version": "go1.19"
-//	}
-func (i Info) JSON() string {
-	data, _ := json.MarshalIndent(i, "", "  ")
-	return string(data)
-}
-
-// JSONCompact returns a compact JSON representation of version information
-// Example: {"version":"0.0.0","branch":"main","revision":"1234567","built_at":"2023-01-01T00:00:00Z","go_version":"go1.19"}
-func (i Info) JSONCompact() string {
-	data, _ := json.Marshal(i)
-	return string(data)
-}
-
 // Print prints version information to stdout
-// Example:
-// Version: 0.0.0
-// Branch: main
-// Revision: 1234567
-// Built At: 2023-01-01T00:00:00Z
-// Go Version: go1.19
 func Print() {
 	info := GetVersionInfo()
-	fmt.Printf("Version: %s\nBranch: %s\nRevision: %s\nBuilt At: %s\nGo Version: %s\n",
-		info.Version, info.Branch, info.Revision, info.BuiltAt, info.GoVersion)
+	fmt.Printf("Version: %s\nBuilt At: %s\n", info.Version, info.BuiltAt)
 }`
 }

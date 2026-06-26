@@ -1,7 +1,6 @@
 package version
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -23,6 +22,8 @@ var (
 
 	// GoVersion is the go version used to build
 	GoVersion = runtime.Version()
+
+	showVersion bool
 )
 
 // VersionInfo contains version information
@@ -49,21 +50,16 @@ func GetVersionInfo() *VersionInfo {
 	}
 }
 
-// String returns a string representation of version info
-func (v *VersionInfo) String() string {
-	data, _ := json.MarshalIndent(v, "", "  ")
-	return string(data)
+func init() {
+	flag.BoolVar(&showVersion, "version", false, "show version information")
+	flag.BoolVar(&showVersion, "v", false, "show version information")
 }
 
-// Flags handles version flags
+// Flags handles version flags.
 func Flags() {
-	version := flag.Bool("version", false, "Print version information")
-	v := flag.Bool("v", false, "Print version information (shorthand)")
-
-	flag.Parse()
-
-	if *version || *v {
-		fmt.Println(GetVersionInfo())
+	if showVersion {
+		info := GetVersionInfo()
+		fmt.Printf("Version: %s\nBuilt At: %s\n", info.Version, info.BuildTime)
 		os.Exit(0)
 	}
 }

@@ -16,7 +16,6 @@ func TestNewRootCmd_Subcommands(t *testing.T) {
 	}
 
 	expected := map[string]bool{
-		"version": false,
 		"init":    false,
 		"create":  false,
 		"migrate": false,
@@ -67,6 +66,9 @@ func TestNewRootCmd_DefaultShowsHelp(t *testing.T) {
 	if strings.Contains(output.String(), "\n  help") {
 		t.Fatalf("expected help output not to include help command, got %q", output.String())
 	}
+	if strings.Contains(output.String(), "\n  version") {
+		t.Fatalf("expected help output not to include version command, got %q", output.String())
+	}
 }
 
 func TestNewRootCmd_VersionFlag(t *testing.T) {
@@ -101,30 +103,18 @@ func TestNewRootCmd_UnknownCommandReturnsSingleError(t *testing.T) {
 	}
 }
 
-func TestNewVersionCommand_Run(t *testing.T) {
-	cmd := NewVersionCommand()
+func TestNewRootCmd_VersionSubcommandIsNotRegistered(t *testing.T) {
+	cmd := NewRootCmd()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
-	cmd.SetArgs([]string{})
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"version"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("version command failed: %v", err)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected version subcommand to be unavailable")
 	}
-
-	if !strings.Contains(output.String(), "Version:") {
-		t.Fatalf("expected output to contain version line, got %q", output.String())
-	}
-	if !strings.Contains(output.String(), "Built At:") {
-		t.Fatalf("expected output to contain build time line, got %q", output.String())
-	}
-}
-
-func TestNewVersionCommand_HasNoExtendedFlags(t *testing.T) {
-	cmd := NewVersionCommand()
-
-	for _, name := range []string{"json", "verbose"} {
-		if cmd.Flags().Lookup(name) != nil {
-			t.Fatalf("expected version command not to expose %q flag", name)
-		}
+	if !strings.Contains(err.Error(), `unknown command "version"`) {
+		t.Fatalf("expected unknown command error for version subcommand, got %v", err)
 	}
 }

@@ -57,24 +57,17 @@ const (
 
 func main() {
 	flag.Parse()
-	// handle version flags
 	version.Flags()
-	
-	// load config
+
 	conf := loadConfig()
-	
-	// set logger version
 	logger.SetVersion(version.GetVersionInfo().Version)
 
 	appName := strings.ToLower(conf.AppName)
 
-	// init tracer
 	initTracer(conf, appName)
 
-	// init sentry
 	initSentry(conf, appName)
 
-	// initialize logger
 	cleanupLogger := initializeLogger(conf)
 	defer cleanupLogger()
 

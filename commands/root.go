@@ -53,7 +53,6 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "print version information")
 
 	rootCmd.AddCommand(
-		NewVersionCommand(),
 		NewInitCommand(),
 		NewCreateCommand(),
 		NewMigrateCommand(),
