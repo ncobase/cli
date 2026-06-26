@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ncobase/cli/internal/app"
+	"github.com/ncobase/cli/commands"
 )
 
 func main() {
-	if err := app.Execute(); err != nil {
+	rootCmd := commands.NewRootCmd()
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
