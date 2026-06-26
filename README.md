@@ -201,9 +201,9 @@ nco create core audit --use-gorm --db sqlite --with-cmd --dry-run --output json
 ### Other Commands
 
 ```bash
+nco -v                  # Show version
+nco --version           # Show version
 nco version              # Show version
-nco version --verbose    # Show full version metadata
-nco version --json       # Show version metadata as JSON
 nco migrate <command>    # Database migrations (requires atlas)
 nco schema <command>     # Schema management (requires atlas)
 ```

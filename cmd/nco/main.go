@@ -9,7 +9,6 @@ import (
 
 func main() {
 	rootCmd := commands.NewRootCmd()
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
