@@ -4,7 +4,7 @@ dist/
 build/
 bin/
 ncore
-nco
+/nco
 nco-app*
 test-app/
 ncore-app/

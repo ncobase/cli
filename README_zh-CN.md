@@ -26,13 +26,16 @@
 ## 安装
 
 ```bash
+# 官方 nco 命令
+go install github.com/ncobase/cli/cmd/nco@latest
+
 # 从源码安装
 git clone https://github.com/ncobase/cli.git
 cd cli && make build
 sudo mv bin/nco /usr/local/bin/
 
 # 快速构建
-go build -o nco .
+go build -o nco ./cmd/nco
 ```
 
 ## 快速开始
@@ -612,6 +615,10 @@ vim data/repository/repository.go
 
 **版本信息不显示：**
 始终使用 `make build` 而不是 `go build` 来进行版本注入。
+
+**`go install github.com/ncobase/cli@latest` 安装出 `cli`：**
+根模块路径会安装名为 `cli` 的二进制。需要安装 `nco` 命令时，请使用
+`go install github.com/ncobase/cli/cmd/nco@latest`。
 
 ## 模板能力详解
 
