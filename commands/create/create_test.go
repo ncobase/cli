@@ -61,11 +61,27 @@ func TestNewCommand_HasExpectedSubcommandsAndFlags(t *testing.T) {
 		"use-redis", "use-elastic", "use-opensearch", "use-meilisearch",
 		"use-kafka", "use-rabbitmq", "use-s3", "use-minio", "use-aliyun",
 		"with-grpc", "with-tracing", "with-test", "with-cmd", "group",
+		"dry-run", "output",
 	}
 
 	for _, flagName := range requiredFlags {
 		if cmd.Flags().Lookup(flagName) == nil {
 			t.Fatalf("expected flag %q to exist", flagName)
+		}
+	}
+}
+
+func TestCreateSubcommandsHaveGenerationFlags(t *testing.T) {
+	cmd := NewCommand()
+	for _, name := range []string{"core", "business", "plugin"} {
+		sub, _, err := cmd.Find([]string{name})
+		if err != nil {
+			t.Fatalf("failed to find %s subcommand: %v", name, err)
+		}
+		for _, flagName := range []string{"path", "module", "with-cmd", "group", "dry-run", "output"} {
+			if sub.Flags().Lookup(flagName) == nil {
+				t.Fatalf("expected %s subcommand to include flag %q", name, flagName)
+			}
 		}
 	}
 }
@@ -128,6 +144,26 @@ func TestCreateCustomDirectoryGeneration(t *testing.T) {
 	for _, file := range expectedFiles {
 		if _, err := os.Stat(file); err != nil {
 			t.Fatalf("expected generated file %q, got error: %v", file, err)
+		}
+	}
+}
+
+func TestCreateDryRunJSONDoesNotWriteFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"core", "audit", "--path", tmpDir, "--dry-run", "--output", "json", "--use-gorm", "--db", "sqlite", "--with-cmd"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("dry-run create command failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "core", "audit")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run not to create files, stat error: %v", err)
+	}
+	for _, expected := range []string{`"dry_run": true`, `"base_path"`, `"module_requirements"`} {
+		if !bytes.Contains(output.Bytes(), []byte(expected)) {
+			t.Fatalf("expected json output to contain %s, got %s", expected, output.String())
 		}
 	}
 }

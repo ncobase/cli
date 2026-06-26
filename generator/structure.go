@@ -2,18 +2,12 @@ package generator
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/ncobase/cli/generator/templates"
-	"github.com/ncobase/cli/utils"
 )
 
-// createStructure creates the extension structure
-func createStructure(basePath string, data *templates.Data, mainTemplate func(string) string) error {
-	if err := utils.EnsureDir(basePath); err != nil {
-		return fmt.Errorf("failed to create base directory: %v", err)
-	}
-
+func buildExtensionRenderPlan(data *templates.Data, mainTemplate func(string) string) (*renderPlan, error) {
+	plan := newRenderPlan()
 	directories := []string{
 		"data", "data/repository",
 		"handler", "service", "structs",
@@ -27,12 +21,7 @@ func createStructure(basePath string, data *templates.Data, mainTemplate func(st
 	if data.WithTest {
 		directories = append(directories, "tests")
 	}
-
-	for _, dir := range directories {
-		if err := utils.EnsureDir(filepath.Join(basePath, dir)); err != nil {
-			return fmt.Errorf("failed to create directory %s: %v", dir, err)
-		}
-	}
+	plan.addDir(directories...)
 
 	selectDataTemplate := func(data templates.Data) string {
 		if data.UseEnt {
@@ -71,10 +60,12 @@ func createStructure(basePath string, data *templates.Data, mainTemplate func(st
 	}
 
 	for filePath, tmpl := range files {
-		if err := utils.WriteTemplateFile(filepath.Join(basePath, filePath), tmpl, data); err != nil {
-			return fmt.Errorf("failed to create file %s: %v", filePath, err)
+		content, err := renderTemplateString(filePath, tmpl, data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to render file %s: %v", filePath, err)
 		}
+		plan.addFile(filePath, content)
 	}
 
-	return nil
+	return plan, nil
 }

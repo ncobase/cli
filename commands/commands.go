@@ -14,15 +14,37 @@ import (
 
 // NewVersionCommand creates the version command
 func NewVersionCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		jsonOutput bool
+		verbose    bool
+	)
+
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",
-		Run: func(cmd *cobra.Command, args []string) {
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
 			info := version.GetVersionInfo()
-			fmt.Println("Version:", info.Version)
-			fmt.Println("Built At:", info.BuiltAt)
+			out := cmd.OutOrStdout()
+
+			if jsonOutput {
+				fmt.Fprintln(out, info.JSON())
+				return nil
+			}
+			if verbose {
+				fmt.Fprintln(out, info.String())
+				return nil
+			}
+
+			fmt.Fprintln(out, "Version:", info.Version)
+			fmt.Fprintln(out, "Built At:", info.BuiltAt)
+			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print version information as JSON")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print full version information")
+	return cmd
 }
 
 // NewCreateCommand creates the extension generation command

@@ -42,8 +42,8 @@ type Info struct {
 	Version   string ` + "`" + `json:"version"` + "`" + `
 	Branch    string ` + "`" + `json:"branch"` + "`" + `
 	Revision  string ` + "`" + `json:"revision"` + "`" + `
-	BuiltAt   string ` + "`" + `json:"builtAt"` + "`" + `
-	GoVersion string ` + "`" + `json:"goVersion"` + "`" + `
+	BuiltAt   string ` + "`" + `json:"built_at"` + "`" + `
+	GoVersion string ` + "`" + `json:"go_version"` + "`" + `
 }
 
 func init() {
@@ -199,8 +199,8 @@ func (i Info) String() string {
 //	  "version": "0.0.0",
 //	  "branch": "main",
 //	  "revision": "1234567",
-//	  "builtAt": "2023-01-01T00:00:00Z",
-//	  "goVersion": "go1.19"
+//	  "built_at": "2023-01-01T00:00:00Z",
+//	  "go_version": "go1.19"
 //	}
 func (i Info) JSON() string {
 	data, _ := json.MarshalIndent(i, "", "  ")
@@ -208,7 +208,7 @@ func (i Info) JSON() string {
 }
 
 // JSONCompact returns a compact JSON representation of version information
-// Example: {"version":"0.0.0","branch":"main","revision":"1234567","builtAt":"2023-01-01T00:00:00Z","goVersion":"go1.19"}
+// Example: {"version":"0.0.0","branch":"main","revision":"1234567","built_at":"2023-01-01T00:00:00Z","go_version":"go1.19"}
 func (i Info) JSONCompact() string {
 	data, _ := json.Marshal(i)
 	return string(data)

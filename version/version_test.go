@@ -92,6 +92,9 @@ func TestInfoJSON(t *testing.T) {
 	}
 
 	raw := info.JSON()
+	if !strings.Contains(raw, `"built_at"`) || !strings.Contains(raw, `"go_version"`) {
+		t.Fatalf("expected snake_case json fields, got %q", raw)
+	}
 
 	var parsed Info
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {

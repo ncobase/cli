@@ -96,18 +96,21 @@ nco init <项目名> [标志]
 | 类别          | 标志                                                                          | 说明                                    |
 | ------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
 | **ORM**       | `--use-ent`<br>`--use-gorm`<br>`--use-mongo`                                  | Ent (SQL)、GORM (SQL) 或 MongoDB        |
-| **数据库**    | `--db`                                                                        | postgres、mysql、sqlite、mongodb、neo4j |
+| **数据库**    | `--db`                                                                        | postgres、mysql、sqlite、mongodb        |
 | **缓存/搜索** | `--use-redis`<br>`--use-elastic`<br>`--use-opensearch`<br>`--use-meilisearch` | 缓存和搜索引擎                          |
 | **消息队列**  | `--use-kafka`<br>`--use-rabbitmq`                                             | 消息系统                                |
 | **存储**      | `--use-s3`<br>`--use-minio`<br>`--use-aliyun`                                 | 对象存储                                |
 | **服务**      | `--with-grpc`<br>`--with-tracing`                                             | gRPC 服务器<br>OpenTelemetry 追踪       |
-| **其他**      | `--with-test`<br>`-m, --module`                                               | 生成测试<br>自定义模块名                |
+| **其他**      | `--with-test`<br>`-p, --path`<br>`-m, --module`<br>`--dry-run`<br>`--output`   | 生成测试<br>输出路径<br>自定义模块名<br>预览生成计划<br>text 或 json |
 
 **示例：**
 
 ```bash
 # PostgreSQL REST API
 nco init blog --db postgres --use-ent --with-test
+
+# 生成到指定输出目录
+nco init blog --path ./apps --db postgres --use-ent
 
 # 全栈微服务
 nco init orders \
@@ -148,11 +151,14 @@ nco create [类型] <名称> [标志]
 | `--use-ent`    | 使用 Ent ORM（SQL 数据库）    | false  |
 | `--use-gorm`   | 使用 GORM（SQL 数据库）       | false  |
 | `--use-mongo`  | 使用 MongoDB 驱动             | false  |
+| `--db`         | 数据库驱动：postgres、mysql、sqlite、mongodb | auto |
 | `--with-test`  | 生成测试文件                  | false  |
-| `--with-cmd`   | 生成 cmd/main.go 用于独立运行 | false  |
+| `--with-cmd`   | 生成 cmd/main.go 和可运行服务装配 | false |
 | `-p, --path`   | 输出路径（默认：当前目录）    | `.`    |
 | `-m, --module` | Go 模块名称                   | auto   |
 | `--group`      | 可选的域组名称                | -      |
+| `--dry-run`    | 只输出生成计划，不写入文件    | false  |
+| `--output`     | 输出格式：text 或 json        | text   |
 
 **生成的结构（每个扩展）：**
 
@@ -185,6 +191,9 @@ nco create plugin payment --use-mongo
 
 # 在 'features' 目录中的自定义扩展
 nco create features notification --use-ent
+
+# 预览生成文件和模块依赖
+nco create core audit --use-gorm --db sqlite --with-cmd --dry-run --output json
 ```
 
 **注意：** 扩展可以无缝集成到现有的 ncobase 项目中，并可以使用 `--with-cmd` 独立开发/测试。
@@ -193,6 +202,8 @@ nco create features notification --use-ent
 
 ```bash
 nco version              # 显示版本
+nco version --verbose    # 显示完整版本元数据
+nco version --json       # 以 JSON 输出版本元数据
 nco migrate <命令>       # 数据库迁移（需要 atlas）
 nco schema <命令>        # Schema 管理（需要 atlas）
 ```
@@ -485,7 +496,8 @@ nco create plugin analytics --use-mongo
 | MongoDB       | `--db mongodb --use-mongo` | 原生 | 文档存储      |
 | Redis         | `--use-redis`              | 原生 | 缓存/队列     |
 | Elasticsearch | `--use-elastic`            | 原生 | 搜索          |
-| Neo4j         | `--db neo4j`               | 原生 | 图数据库      |
+| OpenSearch    | `--use-opensearch`         | 原生 | 搜索          |
+| Meilisearch   | `--use-meilisearch`        | 原生 | 搜索          |
 
 ## gRPC 与可观测性
 

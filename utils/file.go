@@ -50,6 +50,17 @@ func ValidateName(name string) bool {
 	return matched
 }
 
+// ValidatePathSegment validates a single relative directory segment.
+func ValidatePathSegment(name string) bool {
+	if name == "" || filepath.IsAbs(name) || name == "." || name == ".." {
+		return false
+	}
+	if filepath.Clean(name) != name {
+		return false
+	}
+	return ValidateName(name)
+}
+
 // FileExists checks file existence
 func FileExists(path string) bool {
 	_, err := os.Stat(path)

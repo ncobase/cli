@@ -51,6 +51,22 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
+func TestValidatePathSegment(t *testing.T) {
+	valid := []string{"core", "business_1", "plugin-name"}
+	for _, name := range valid {
+		if !ValidatePathSegment(name) {
+			t.Fatalf("expected valid path segment %q", name)
+		}
+	}
+
+	invalid := []string{"", ".", "..", "nested/path", "/absolute"}
+	for _, name := range invalid {
+		if ValidatePathSegment(name) {
+			t.Fatalf("expected invalid path segment %q", name)
+		}
+	}
+}
+
 func TestPathAndFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	file := filepath.Join(tmpDir, "a.txt")

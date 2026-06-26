@@ -10,10 +10,10 @@ func TestNewCommand_MetadataAndFlags(t *testing.T) {
 	}
 
 	requiredFlags := []string{
-		"module", "use-mongo", "use-ent", "use-gorm", "db",
+		"path", "module", "use-mongo", "use-ent", "use-gorm", "db",
 		"use-redis", "use-elastic", "use-opensearch", "use-meilisearch",
 		"use-kafka", "use-rabbitmq", "use-s3", "use-minio", "use-aliyun",
-		"with-grpc", "with-tracing", "with-test",
+		"with-grpc", "with-tracing", "with-test", "dry-run", "output",
 	}
 
 	for _, name := range requiredFlags {

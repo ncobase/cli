@@ -3,7 +3,6 @@ package generator
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/ncobase/cli/generator/templates"
@@ -28,6 +27,7 @@ type Options struct {
 	WithTracing bool
 	Group       string
 	Standalone  bool
+	DryRun      bool
 
 	DBDriver      string
 	UseRedis      bool
@@ -48,98 +48,101 @@ func DefaultOptions() *Options {
 	}
 }
 
-// Generate generates code
-func Generate(opts *Options) error {
+// Generate builds and applies a generation plan. Dry-run mode returns the same plan without writing files.
+func Generate(opts *Options) (*Result, error) {
+	plan, render, err := prepareGeneration(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.DryRun {
+		return &Result{
+			DryRun:  true,
+			Applied: false,
+			Message: fmt.Sprintf("Dry run complete for %q. No files were written.", plan.Name),
+			Plan:    plan,
+		}, nil
+	}
+
+	if len(plan.Conflicts) > 0 {
+		return nil, fmt.Errorf("generation target has conflicts: %s", strings.Join(plan.Conflicts, "; "))
+	}
+
+	if err := writeRenderPlan(plan.BasePath, render); err != nil {
+		return nil, err
+	}
+
+	if needsGoModule(opts) {
+		if err := runGoModuleOperations(plan.BasePath, opts); err != nil {
+			return nil, err
+		}
+	}
+
+	return &Result{
+		DryRun:  false,
+		Applied: true,
+		Message: successMessage(plan),
+		Plan:    plan,
+	}, nil
+}
+
+func prepareGeneration(opts *Options) (*Plan, *renderPlan, error) {
+	if opts == nil {
+		return nil, nil, fmt.Errorf("generation options are required")
+	}
+
+	opts.Name = strings.TrimSpace(opts.Name)
+	opts.ModuleName = strings.TrimSpace(opts.ModuleName)
+	opts.OutputPath = strings.TrimSpace(opts.OutputPath)
+	opts.CustomDir = strings.TrimSpace(opts.CustomDir)
+	opts.Group = strings.TrimSpace(opts.Group)
+
 	if !utils.ValidateName(opts.Name) {
-		return fmt.Errorf("invalid name: %s", opts.Name)
+		return nil, nil, fmt.Errorf("invalid name %q: use letters, numbers, hyphens, or underscores, and start with a letter", opts.Name)
+	}
+	if opts.CustomDir != "" && !utils.ValidatePathSegment(opts.CustomDir) {
+		return nil, nil, fmt.Errorf("invalid custom directory %q", opts.CustomDir)
+	}
+	if opts.Group != "" && !utils.ValidateName(opts.Group) {
+		return nil, nil, fmt.Errorf("invalid group %q", opts.Group)
 	}
 
 	if err := normalizeOptions(opts); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	outputPath, err := resolveOutputPath(opts)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	opts.OutputPath = outputPath
 	opts.ModuleName = resolveModuleName(opts, outputPath)
+	if strings.ContainsAny(opts.ModuleName, " \t\r\n") {
+		return nil, nil, fmt.Errorf("module name %q must not contain whitespace", opts.ModuleName)
+	}
 
 	basePath := getBasePath(opts, outputPath)
+	data := buildTemplateData(opts)
+
+	render, err := buildRenderPlan(opts, data)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if needsGoModule(opts) {
+		render.addFile("go.mod", buildGoModContent(data, opts))
+	}
+
+	plan := buildPlan(opts, data, basePath, render)
 	if utils.PathExists(basePath) {
-		return fmt.Errorf("directory '%s' already exists", basePath)
+		plan.Conflicts = append(plan.Conflicts, fmt.Sprintf("directory %q already exists", basePath))
 	}
 
-	if err := utils.EnsureDir(basePath); err != nil {
-		return fmt.Errorf("failed to create base directory: %v", err)
-	}
-
-	data := &templates.Data{
-		Name:          opts.Name,
-		Type:          opts.Type,
-		UseMongo:      opts.UseMongo,
-		UseEnt:        opts.UseEnt,
-		UseGorm:       opts.UseGorm,
-		WithTest:      opts.WithTest,
-		WithCmd:       opts.WithCmd || opts.Standalone,
-		WithGRPC:      opts.WithGRPC,
-		WithTracing:   opts.WithTracing,
-		Standalone:    opts.Standalone,
-		Group:         opts.Group,
-		ExtType:       opts.Type,
-		ModuleName:    opts.ModuleName,
-		CustomDir:     opts.CustomDir,
-		PackagePath:   getPackagePath(opts),
-		DBDriver:      opts.DBDriver,
-		UseRedis:      opts.UseRedis,
-		UseElastic:    opts.UseElastic,
-		UseOpenSearch: opts.UseOpenSearch,
-		UseMeili:      opts.UseMeili,
-		UseKafka:      opts.UseKafka,
-		UseRabbitMQ:   opts.UseRabbitMQ,
-		UseS3Storage:  opts.UseS3Storage,
-		UseMinio:      opts.UseMinio,
-		UseAliyun:     opts.UseAliyun,
-	}
-
-	if opts.Standalone {
-		if err := createStandaloneStructure(basePath, data); err != nil {
-			return err
-		}
-		if err := initializeGoModule(basePath, data, opts); err != nil {
-			return err
-		}
-		fmt.Printf("Successfully generated standalone application '%s' in %s\n", data.Name, getDesc(data))
-		return nil
-	}
-
-	mainTemplate := getMainTemplate(opts.Type)
-	if err := createStructure(basePath, data, mainTemplate); err != nil {
-		return err
-	}
-
-	if opts.WithCmd {
-		if err := createCmdStructure(basePath, data); err != nil {
-			return err
-		}
-		if err := initializeGoModule(basePath, data, opts); err != nil {
-			return err
-		}
-	}
-
-	fmt.Printf("Successfully generated '%s' in %s\n", data.Name, getDesc(data))
-	return nil
+	return plan, render, nil
 }
 
 func normalizeOptions(opts *Options) error {
 	opts.DBDriver = strings.ToLower(strings.TrimSpace(opts.DBDriver))
-
-	if opts.UseEnt && opts.UseGorm {
-		return fmt.Errorf("use either --use-ent or --use-gorm, not both")
-	}
-	if opts.UseMongo && (opts.UseEnt || opts.UseGorm) {
-		return fmt.Errorf("use --use-mongo without --use-ent or --use-gorm")
-	}
 
 	if opts.DBDriver == "postgresql" {
 		opts.DBDriver = "postgres"
@@ -147,12 +150,26 @@ func normalizeOptions(opts *Options) error {
 	if opts.DBDriver == "sqlite3" {
 		opts.DBDriver = "sqlite"
 	}
+	if opts.DBDriver != "" && opts.DBDriver != "none" {
+		switch opts.DBDriver {
+		case "postgres", "mysql", "sqlite", "mongodb":
+		default:
+			return fmt.Errorf("unsupported database driver %q", opts.DBDriver)
+		}
+	}
 
 	if opts.DBDriver == "mongodb" {
 		opts.UseMongo = true
 	}
-	if opts.UseMongo {
+	if opts.UseMongo && opts.DBDriver == "" {
 		opts.DBDriver = "mongodb"
+	}
+
+	if opts.UseEnt && opts.UseGorm {
+		return fmt.Errorf("use either --use-ent or --use-gorm, not both")
+	}
+	if opts.UseMongo && (opts.UseEnt || opts.UseGorm) {
+		return fmt.Errorf("use --use-mongo without --use-ent or --use-gorm")
 	}
 
 	needsStandaloneData := opts.Standalone || opts.WithCmd
@@ -177,12 +194,8 @@ func normalizeOptions(opts *Options) error {
 	if opts.UseMongo && opts.DBDriver != "mongodb" {
 		return fmt.Errorf("MongoDB projects must use --db mongodb")
 	}
-	if opts.DBDriver != "" && opts.DBDriver != "none" {
-		switch opts.DBDriver {
-		case "postgres", "mysql", "sqlite", "mongodb", "neo4j":
-		default:
-			return fmt.Errorf("unsupported database driver %q", opts.DBDriver)
-		}
+	if countEnabled(opts.UseS3Storage, opts.UseMinio, opts.UseAliyun) > 1 {
+		return fmt.Errorf("choose only one storage driver: --use-s3, --use-minio, or --use-aliyun")
 	}
 
 	return nil
@@ -201,13 +214,9 @@ func getMainTemplate(typ string) func(string) string {
 	}
 }
 
-func createCmdStructure(basePath string, data *templates.Data) error {
-	dirs := []string{"cmd", "internal/server", "internal/middleware", "internal/version"}
-	for _, dir := range dirs {
-		if err := utils.EnsureDir(filepath.Join(basePath, dir)); err != nil {
-			return fmt.Errorf("failed to create %s: %v", dir, err)
-		}
-	}
+func buildCmdRenderPlan(data *templates.Data) (*renderPlan, error) {
+	plan := newRenderPlan()
+	plan.addDir("cmd", "internal/server", "internal/middleware", "internal/version")
 
 	files := map[string]string{
 		"cmd/main.go":                             templates.CmdMainTemplate(data),
@@ -223,10 +232,22 @@ func createCmdStructure(basePath string, data *templates.Data) error {
 	}
 
 	for filePath, tmpl := range files {
-		if err := utils.WriteTemplateFile(filepath.Join(basePath, filePath), tmpl, data); err != nil {
-			return fmt.Errorf("failed to create file %s: %v", filePath, err)
+		content, err := renderTemplateString(filePath, tmpl, data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to render file %s: %v", filePath, err)
 		}
+		plan.addFile(filePath, content)
 	}
 
-	return nil
+	return plan, nil
+}
+
+func countEnabled(values ...bool) int {
+	count := 0
+	for _, value := range values {
+		if value {
+			count++
+		}
+	}
+	return count
 }

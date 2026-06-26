@@ -96,18 +96,21 @@ nco init <name> [flags]
 | Category          | Flags                                                                         | Description                             |
 | ----------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
 | **ORM**           | `--use-ent`<br>`--use-gorm`<br>`--use-mongo`                                  | Ent (SQL), GORM (SQL), or MongoDB       |
-| **Database**      | `--db`                                                                        | postgres, mysql, sqlite, mongodb, neo4j |
+| **Database**      | `--db`                                                                        | postgres, mysql, sqlite, mongodb        |
 | **Cache/Search**  | `--use-redis`<br>`--use-elastic`<br>`--use-opensearch`<br>`--use-meilisearch` | Caching and search engines              |
 | **Message Queue** | `--use-kafka`<br>`--use-rabbitmq`                                             | Messaging systems                       |
 | **Storage**       | `--use-s3`<br>`--use-minio`<br>`--use-aliyun`                                 | Object storage                          |
 | **Services**      | `--with-grpc`<br>`--with-tracing`                                             | gRPC server<br>OpenTelemetry tracing    |
-| **Other**         | `--with-test`<br>`-m, --module`                                               | Generate tests<br>Custom module name    |
+| **Other**         | `--with-test`<br>`-p, --path`<br>`-m, --module`<br>`--dry-run`<br>`--output`   | Generate tests<br>Output path<br>Custom module name<br>Preview generation<br>text or json |
 
 **Examples:**
 
 ```bash
 # REST API with PostgreSQL
 nco init blog --db postgres --use-ent --with-test
+
+# Generate under a specific output directory
+nco init blog --path ./apps --db postgres --use-ent
 
 # Microservice with full stack
 nco init orders \
@@ -148,11 +151,14 @@ nco create [type] <name> [flags]
 | `--use-ent`    | Use Ent ORM (for SQL databases)          | false   |
 | `--use-gorm`   | Use GORM (for SQL databases)             | false   |
 | `--use-mongo`  | Use MongoDB driver                       | false   |
+| `--db`         | Database driver: postgres, mysql, sqlite, mongodb | auto |
 | `--with-test`  | Generate test files                      | false   |
-| `--with-cmd`   | Generate cmd/main.go for standalone run  | false   |
+| `--with-cmd`   | Generate cmd/main.go and runnable service wiring | false |
 | `-p, --path`   | Output path (default: current directory) | `.`     |
 | `-m, --module` | Go module name                           | auto    |
 | `--group`      | Optional domain group name               | -       |
+| `--dry-run`    | Print the generation plan without writing files | false |
+| `--output`     | Output format: text or json              | text    |
 
 **Generated Structure (per extension):**
 
@@ -185,6 +191,9 @@ nco create plugin payment --use-mongo
 
 # Custom extension in 'features' directory
 nco create features notification --use-ent
+
+# Preview generated files and module dependencies
+nco create core audit --use-gorm --db sqlite --with-cmd --dry-run --output json
 ```
 
 **Note:** Extensions integrate seamlessly with existing ncobase projects and can be developed/tested independently with `--with-cmd`.
@@ -193,6 +202,8 @@ nco create features notification --use-ent
 
 ```bash
 nco version              # Show version
+nco version --verbose    # Show full version metadata
+nco version --json       # Show version metadata as JSON
 nco migrate <command>    # Database migrations (requires atlas)
 nco schema <command>     # Schema management (requires atlas)
 ```
@@ -485,7 +496,8 @@ nco create plugin analytics --use-mongo
 | MongoDB       | `--db mongodb --use-mongo` | Native | Document store    |
 | Redis         | `--use-redis`              | Native | Cache/Queue       |
 | Elasticsearch | `--use-elastic`            | Native | Search            |
-| Neo4j         | `--db neo4j`               | Native | Graph database    |
+| OpenSearch    | `--use-opensearch`         | Native | Search            |
+| Meilisearch   | `--use-meilisearch`        | Native | Search            |
 
 ## gRPC & Observability
 

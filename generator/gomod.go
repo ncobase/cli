@@ -4,19 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/ncobase/cli/generator/templates"
-	"github.com/ncobase/cli/utils"
 	"github.com/ncobase/cli/version"
 )
 
-// initializeGoModule initializes a Go module for the generated code
-func initializeGoModule(basePath string, data *templates.Data, opts *Options) error {
-	goModPath := filepath.Join(basePath, "go.mod")
-
+func buildModuleRequirements(opts *Options) map[string]string {
 	requirements := map[string]string{
 		"github.com/gin-gonic/gin":            version.GinVersion,
 		"github.com/google/uuid":              version.UUIDVersion,
@@ -66,6 +61,12 @@ func initializeGoModule(basePath string, data *templates.Data, opts *Options) er
 		requirements["github.com/ncobase/ncore/oss"] = version.NcoreVersion("github.com/ncobase/ncore/oss")
 	}
 
+	return requirements
+}
+
+func buildGoModContent(data *templates.Data, opts *Options) string {
+	requirements := buildModuleRequirements(opts)
+
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "module %s\n\ngo %s\n\nrequire (\n", data.PackagePath, version.DefaultGoVersion)
 	for _, module := range sortedModules(requirements) {
@@ -73,21 +74,59 @@ func initializeGoModule(basePath string, data *templates.Data, opts *Options) er
 	}
 	builder.WriteString(")\n")
 
-	if err := utils.WriteTemplateFile(goModPath, builder.String(), nil); err != nil {
-		return fmt.Errorf("failed to create go.mod file: %w", err)
-	}
+	return builder.String()
+}
 
+func moduleRequirementList(opts *Options) []ModuleRequirement {
+	requirements := buildModuleRequirements(opts)
+	modules := sortedModules(requirements)
+	result := make([]ModuleRequirement, 0, len(modules))
+	for _, module := range modules {
+		result = append(result, ModuleRequirement{
+			Module:  module,
+			Version: requirements[module],
+		})
+	}
+	return result
+}
+
+func goModuleOperations(basePath string, opts *Options) []Operation {
+	operations := make([]Operation, 0, 3)
 	if opts.UseEnt {
-		if err := runGoCommand(basePath, "go", "mod", "tidy", "-e"); err != nil {
-			return err
-		}
-		if err := generateEntCode(basePath); err != nil {
-			return err
-		}
+		operations = append(operations,
+			Operation{
+				Name:       "go mod tidy for Ent code generation",
+				Command:    "go",
+				Args:       []string{"mod", "tidy", "-e"},
+				WorkingDir: basePath,
+				Outputs:    []string{"go.sum"},
+			},
+			Operation{
+				Name:       "generate Ent client",
+				Command:    "go",
+				Args:       []string{"run", "-mod=mod", "entgo.io/ent/cmd/ent", "generate", "--feature", "sql/versioned-migration,sql/execquery,sql/upsert", "--target", "./data/ent", "./data/schema"},
+				WorkingDir: basePath,
+				Outputs:    []string{"data/ent/*", "go.sum"},
+			},
+		)
 	}
 
-	if err := runGoCommand(basePath, "go", "mod", "tidy"); err != nil {
-		return err
+	operations = append(operations, Operation{
+		Name:       "go mod tidy",
+		Command:    "go",
+		Args:       []string{"mod", "tidy"},
+		WorkingDir: basePath,
+		Outputs:    []string{"go.sum"},
+	})
+
+	return operations
+}
+
+func runGoModuleOperations(basePath string, opts *Options) error {
+	for _, operation := range goModuleOperations(basePath, opts) {
+		if err := runGoCommand(basePath, operation.Command, operation.Args...); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -113,16 +152,6 @@ func sortedModules(requirements map[string]string) []string {
 	}
 	sort.Strings(modules)
 	return modules
-}
-
-func generateEntCode(basePath string) error {
-	return runGoCommand(basePath,
-		"go", "run", "-mod=mod", "entgo.io/ent/cmd/ent",
-		"generate",
-		"--feature", "sql/versioned-migration,sql/execquery,sql/upsert",
-		"--target", "./data/ent",
-		"./data/schema",
-	)
 }
 
 func runGoCommand(dir string, name string, args ...string) error {

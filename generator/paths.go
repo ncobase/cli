@@ -36,7 +36,11 @@ func resolveOutputPath(opts *Options) (string, error) {
 		}
 		return cwd, nil
 	}
-	return opts.OutputPath, nil
+	outputPath, err := filepath.Abs(opts.OutputPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve output path %q: %v", opts.OutputPath, err)
+	}
+	return outputPath, nil
 }
 
 // resolveModuleName determines the module name

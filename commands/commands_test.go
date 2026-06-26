@@ -2,40 +2,11 @@ package commands
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	originalStdout := os.Stdout
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
-	}
-
-	os.Stdout = writer
-	fn()
-
-	if err := writer.Close(); err != nil {
-		t.Fatalf("failed to close pipe writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader); err != nil {
-		t.Fatalf("failed to read stdout: %v", err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("failed to close pipe reader: %v", err)
-	}
-
-	return buf.String()
-}
 
 func TestNewRootCmd_Subcommands(t *testing.T) {
 	cmd := NewRootCmd()
@@ -67,14 +38,51 @@ func TestNewRootCmd_Subcommands(t *testing.T) {
 
 func TestNewVersionCommand_Run(t *testing.T) {
 	cmd := NewVersionCommand()
-	output := captureStdout(t, func() {
-		cmd.Run(cmd, nil)
-	})
+	var output bytes.Buffer
+	cmd.SetOut(&output)
 
-	if !strings.Contains(output, "Version:") {
-		t.Fatalf("expected output to contain version line, got %q", output)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("version command failed: %v", err)
 	}
-	if !strings.Contains(output, "Built At:") {
-		t.Fatalf("expected output to contain build time line, got %q", output)
+
+	if !strings.Contains(output.String(), "Version:") {
+		t.Fatalf("expected output to contain version line, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), "Built At:") {
+		t.Fatalf("expected output to contain build time line, got %q", output.String())
+	}
+}
+
+func TestNewVersionCommand_Verbose(t *testing.T) {
+	cmd := NewVersionCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"--verbose"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("version command failed: %v", err)
+	}
+
+	for _, expected := range []string{"Version:", "Branch:", "Revision:", "Go Version:"} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("expected verbose output to contain %q, got %q", expected, output.String())
+		}
+	}
+}
+
+func TestNewVersionCommand_JSON(t *testing.T) {
+	cmd := NewVersionCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"--json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("version command failed: %v", err)
+	}
+
+	for _, expected := range []string{`"version"`, `"built_at"`, `"go_version"`} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("expected json output to contain %q, got %q", expected, output.String())
+		}
 	}
 }

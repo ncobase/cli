@@ -40,8 +40,8 @@ type Info struct {
 	Version   string `json:"version"`
 	Branch    string `json:"branch"`
 	Revision  string `json:"revision"`
-	BuiltAt   string `json:"builtAt"`
-	GoVersion string `json:"goVersion"`
+	BuiltAt   string `json:"built_at"`
+	GoVersion string `json:"go_version"`
 }
 
 func init() {
