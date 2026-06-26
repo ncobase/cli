@@ -15,8 +15,14 @@ func createStructure(basePath string, data *templates.Data, mainTemplate func(st
 	}
 
 	directories := []string{
-		"data", "data/repository", "data/schema",
+		"data", "data/repository",
 		"handler", "service", "structs",
+	}
+	if data.UseEnt {
+		directories = append(directories, "data/schema")
+	}
+	if data.UseGorm {
+		directories = append(directories, "data/model")
 	}
 	if data.WithTest {
 		directories = append(directories, "tests")
@@ -45,14 +51,17 @@ func createStructure(basePath string, data *templates.Data, mainTemplate func(st
 		fmt.Sprintf("%s.go", data.Name): mainTemplate(data.Name),
 		"data/data.go":                  selectDataTemplate(*data),
 		"data/repository/provider.go":   templates.RepositoryTemplate(data),
-		"data/schema/schema.go":         templates.SchemaTemplate(),
 		"handler/provider.go":           templates.HandlerTemplate(data.Name, data.ExtType, data.ModuleName),
 		"service/provider.go":           templates.ServiceTemplate(data.Name, data.ExtType, data.ModuleName),
 		"structs/structs.go":            templates.StructsTemplate(),
 	}
 
 	if data.UseEnt {
+		files["data/schema/item.go"] = templates.SchemaTemplate()
 		files["generate.go"] = templates.GeneraterTemplate(data.Name, data.ExtType, data.ModuleName)
+	}
+	if data.UseGorm {
+		files["data/model/item.go"] = templates.GormItemModelTemplate()
 	}
 
 	if data.WithTest {

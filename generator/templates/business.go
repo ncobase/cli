@@ -37,7 +37,7 @@ type Module struct {
 	em          ext.ManagerInterface
 	conf        *config.Config
 	h           *handler.Handler
-	s           *service.Service
+	s           service.ServiceInterface
 	d           *data.Data
 	cleanup     func(name ...string)
 
@@ -104,7 +104,10 @@ func (m *Module) Name() string {
 
 // RegisterRoutes registers routes for the module
 func (m *Module) RegisterRoutes(r *gin.RouterGroup) {
-	// Implement your route registration logic here
+	if m.h == nil {
+		return
+	}
+	m.h.RegisterRoutes(r.Group("/" + name))
 }
 
 // GetHandlers returns the handlers for the module

@@ -164,6 +164,36 @@ func isBinaryContentType(contentType string) bool {
 
 // shouldSkipPath checks if the path should be skipped
 func shouldSkipPath(r *http.Request, skippedPaths []string) bool {
-	// Implementation simplified
+	if r == nil {
+		return false
+	}
+	path := r.URL.Path
+	for _, pattern := range skippedPaths {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		if pattern == "*" || pattern == path {
+			return true
+		}
+		if strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*") {
+			if strings.Contains(path, strings.Trim(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+		if strings.HasPrefix(pattern, "*") {
+			if strings.HasSuffix(path, strings.TrimPrefix(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+		if strings.HasSuffix(pattern, "*") {
+			if strings.HasPrefix(path, strings.TrimSuffix(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+	}
 	return false
 }

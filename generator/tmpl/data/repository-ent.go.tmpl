@@ -2,24 +2,52 @@ package repository
 
 import (
 	"context"
-	"fmt"
+	"time"
 
+	"github.com/google/uuid"
+
+	"{{ .PackagePath }}/data/ent"
+	"{{ .PackagePath }}/data/ent/example"
 	"{{ .PackagePath }}/data/model"
 )
 
-// FindExample finds an example by ID using Ent
+// FindExample finds an example by ID using Ent.
 func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
-	// Access database via r.d.EC (master) or r.d.ECRead (read replica)
+	client := r.d.GetEntClientWithFallback(ctx, true)
+	record, err := client.Example.Query().Where(example.IDEQ(id)).Only(ctx)
+	if err == nil {
+		return &model.Example{
+			ID:        record.ID,
+			Name:      record.Name,
+			CreatedAt: record.CreatedAt,
+			UpdatedAt: record.UpdatedAt,
+			DeletedAt: record.DeletedAt,
+		}, nil
+	}
+	if !ent.IsNotFound(err) {
+		return nil, err
+	}
 
-	// Example implementation:
-	// client := r.d.GetEntClientWithFallback(ctx, true)
-	// result, err := client.User.Get(ctx, id)
-	// if err != nil {
-	//     return nil, err
-	// }
+	if id == "" {
+		id = uuid.NewString()
+	}
+	now := time.Now().UTC()
+	record, err = r.d.GetMasterEntClient().Example.Create().
+		SetID(id).
+		SetName("Example Model").
+		SetEmail("example@" + "{{ .Name }}" + ".local").
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	// Example implementation would go here
-	_ = id
-
-	return nil, fmt.Errorf("not implemented")
+	return &model.Example{
+		ID:        record.ID,
+		Name:      record.Name,
+		CreatedAt: record.CreatedAt,
+		UpdatedAt: record.UpdatedAt,
+		DeletedAt: record.DeletedAt,
+	}, nil
 }

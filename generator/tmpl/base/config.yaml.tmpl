@@ -21,7 +21,20 @@ grpc:
   port: 9090
 {{- end }}
 
-{{- if ne .DBDriver "" }}
+{{- if .UseMongo }}
+
+data:
+  mongodb:
+    strategy: random
+    max_retry: 3
+    master:
+      uri: mongodb://localhost:27017/{{ .Name }}
+      logging: false
+    # slaves:
+    #   - uri: mongodb://localhost:27018/{{ .Name }}
+    #     logging: false
+    #     weight: 1
+{{- else if ne .DBDriver "" }}
 
 data:
   database:
@@ -38,8 +51,6 @@ data:
       source: root:password@tcp(localhost:3306)/{{ .Name }}?charset=utf8mb4&parseTime=True&loc=Local
 {{- else if eq .DBDriver "sqlite" }}
       source: ./data/{{ .Name }}.db
-{{- else if eq .DBDriver "mongodb" }}
-      source: mongodb://localhost:27017/{{ .Name }}
 {{- else }}
       source: localhost
 {{- end }}

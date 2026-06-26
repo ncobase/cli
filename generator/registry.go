@@ -96,6 +96,8 @@ func (r *Registry) RenderData(data *TemplateData) (string, error) {
 		return r.loader.Render("data/data-ent.go", data)
 	} else if data.UseGorm {
 		return r.loader.Render("data/data-gorm.go", data)
+	} else if data.UseMongo {
+		return r.loader.Render("data/data-mongo.go", data)
 	}
 	return "", fmt.Errorf("no ORM specified")
 }
@@ -116,6 +118,8 @@ func (r *Registry) RenderRepository(data *TemplateData) (string, error) {
 		return r.loader.Render("data/repository-ent.go", data)
 	} else if data.UseGorm {
 		return r.loader.Render("data/repository-gorm.go", data)
+	} else if data.UseMongo {
+		return r.loader.Render("data/repository-mongo.go", data)
 	}
 	return "", fmt.Errorf("no ORM specified")
 }
@@ -209,6 +213,16 @@ func (r *Registry) RenderGRPCServer(data *TemplateData) (string, error) {
 		return "", fmt.Errorf("gRPC support not enabled")
 	}
 	return r.loader.Render("server/grpc.go", data)
+}
+
+// RenderHandlerTest renders the handler test template.
+func (r *Registry) RenderHandlerTest(data *TemplateData) (string, error) {
+	return r.loader.Render("test/handler_test.go", data)
+}
+
+// RenderServiceTest renders the service test template.
+func (r *Registry) RenderServiceTest(data *TemplateData) (string, error) {
+	return r.loader.Render("test/service_test.go", data)
 }
 
 // NewTemplateData creates template data from templates.Data

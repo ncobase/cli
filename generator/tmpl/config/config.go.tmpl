@@ -7,13 +7,12 @@ import (
 // Config aliases
 type (
 	Config = nconfig.Config
-	Server = nconfig.Server
 	Data   = nconfig.Data
 )
 
 // Load loads configuration from file
 func Load(path string) (*Config, error) {
-	return nconfig.Load(path)
+	return nconfig.LoadConfig(path)
 }
 
 // IsProd returns true if the current environment is production

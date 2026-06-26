@@ -587,31 +587,25 @@ nco init myapp --db postgres --use-ent --with-test
 cd myapp
 vim config.yaml  # 配置数据库
 
-# 3. 生成 Schema（如果使用 Ent）
-vim data/schema/user.go
-go generate ./...
+# 3. 验证生成代码
+go test ./...
 
-# 4. 实现功能
+# 4. 运行服务
+make run
+
+# 5. 按业务需要扩展生成的 item 合同
+vim data/schema/example.go  # Ent 项目
 vim handler/handler.go
 vim service/service.go
 vim data/repository/repository.go
-
-# 5. 测试和运行
-make test
-make run
 ```
 
 ## 故障排查
 
 **`go mod tidy` 失败：**
 
-```bash
-# 使用 go.work 进行本地 ncore 开发
-go work init
-go work use /path/to/ncore/config
-go work use /path/to/ncore/logging
-# ... 或者直接继续 - go.mod 已经正确生成
-```
+生成项目会直接引用已发布的 ncore 模块。优先检查 `go env GOPROXY` 和网络连通性；生成的
+`go.mod` 不需要本地 `replace` 指令。
 
 **端口冲突：**
 如果 8080 端口被占用，服务器会自动寻找可用端口。
@@ -751,7 +745,7 @@ type StorageProvider interface {
 
 ### 7. 测试模板
 
-生成三种测试：
+生成的测试覆盖 handler 路由和 service 行为：
 
 **Handler 测试：**
 
@@ -772,15 +766,7 @@ func TestHandler_Create(t *testing.T) {
 
 ```go
 // tests/service_test.go.tmpl
-// 使用 mock repository
-```
-
-**集成测试：**
-
-```go
-// tests/integration_test.go.tmpl
-// 使用 testify/suite
-// 包含完整的 CRUD 工作流测试
+// 使用 fake repository
 ```
 
 ## 高级用法

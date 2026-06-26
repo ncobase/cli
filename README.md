@@ -709,7 +709,7 @@ type StorageProvider interface {
 
 ### 7. Test Templates
 
-Three types of tests generated:
+Generated tests cover handler routing and service behavior:
 
 **Handler Tests:**
 
@@ -730,15 +730,7 @@ func TestHandler_Create(t *testing.T) {
 
 ```go
 // tests/service_test.go.tmpl
-// Using mock repositories
-```
-
-**Integration Tests:**
-
-```go
-// tests/integration_test.go.tmpl
-// Using testify/suite
-// Full CRUD workflow tests
+// Using fake repositories
 ```
 
 ## Advanced Usage
@@ -933,31 +925,25 @@ nco init myapp --db postgres --use-ent --with-test
 cd myapp
 vim config.yaml  # Configure database
 
-# 3. Generate schemas (if using Ent)
-vim data/schema/user.go
-go generate ./...
+# 3. Verify generated code
+go test ./...
 
-# 4. Implement features
+# 4. Run the service
+make run
+
+# 5. Extend the generated item contract when needed
+vim data/schema/example.go  # Ent projects
 vim handler/handler.go
 vim service/service.go
 vim data/repository/repository.go
-
-# 5. Test and run
-make test
-make run
 ```
 
 ## Troubleshooting
 
 **`go mod tidy` fails:**
 
-```bash
-# Use go.work for local ncore development
-go work init
-go work use /path/to/ncore/config
-go work use /path/to/ncore/logging
-# ... or just continue - go.mod is already correct
-```
+Generated projects require released ncore modules directly. Re-run `go env GOPROXY` and network
+connectivity checks first; the generated `go.mod` does not require local `replace` directives.
 
 **Port conflicts:**
 The server automatically finds available ports if 8080 is busy.

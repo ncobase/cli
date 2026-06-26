@@ -29,15 +29,6 @@ import (
 {{- if .UseRabbitMQ }}
 	_ "github.com/ncobase/ncore/data/rabbitmq"
 {{- end }}
-{{- if .UseS3Storage }}
-	_ "github.com/ncobase/ncore/data/s3"
-{{- end }}
-{{- if .UseMinio }}
-	_ "github.com/ncobase/ncore/data/minio"
-{{- end }}
-{{- if .UseAliyun }}
-	_ "github.com/ncobase/ncore/data/aliyun"
-{{- end }}
 
 	"{{ .PackagePath }}/data/ent"
 	"{{ .PackagePath }}/data/ent/migrate"

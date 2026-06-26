@@ -7,10 +7,8 @@ import (
 
 // Interface defines the handler interface
 type Interface interface {
-	// Example endpoint
+	// GetExample handles the generated example endpoint.
 	GetExample(c *gin.Context)
-
-	// Add your handler methods here
 }
 
 // handler implements the Interface

@@ -1,125 +1,290 @@
 package templates
 
-import "fmt"
-
-// ExtTestTemplate generates extension test template
 func ExtTestTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package tests
+	return `package tests
 
 import (
 	"testing"
-	"github.com/ncobase/ncore/config"
-	ext "github.com/ncobase/ncore/extension/types"
-	"%s/%s/%s"
+
+	module "{{ .PackagePath }}"
 )
 
-func TestModuleLifecycle(t *testing.T) {
-	m := %s.New()
+func TestExtensionMetadata(t *testing.T) {
+	ext := module.New()
+	if ext.Name() != "{{ .Name }}" {
+		t.Fatalf("expected extension name %q, got %q", "{{ .Name }}", ext.Name())
+	}
+	if ext.Version() == "" {
+		t.Fatal("expected extension version")
+	}
 
-	t.Run("initialization", func(t *testing.T) {
-		// Test Pre-Init
-		if err := m.PreInit(); err != nil {
-			t.Errorf("PreInit failed: %%v", err)
-		}
-
-		// Test Init
-		conf := &config.Config{}
-		em := &ext.ManagerInterface{}
-		if err := m.Init(conf, em); err != nil {
-			t.Errorf("Init failed: %%v", err)
-		}
-
-		// Test Post-Init
-		if err := m.PostInit(); err != nil {
-			t.Errorf("PostInit failed: %%v", err)
-		}
-	})
-
-	t.Run("metadata", func(t *testing.T) {
-		meta := m.GetMetadata()
-		if meta.Name != "%s" {
-			t.Errorf("want name %%s, got %%s", "%s", meta.Name)
-		}
-	})
-
-	t.Run("cleanup", func(t *testing.T) {
-		if err := m.Cleanup(); err != nil {
-			t.Errorf("Cleanup failed: %%v", err)
-		}
-	})
-}`, moduleName, extType, name, name, name, name)
+	meta := ext.GetMetadata()
+	if meta.Name != ext.Name() {
+		t.Fatalf("expected metadata name %q, got %q", ext.Name(), meta.Name)
+	}
+	if meta.Version != ext.Version() {
+		t.Fatalf("expected metadata version %q, got %q", ext.Version(), meta.Version)
+	}
+}
+`
 }
 
-// HandlerTestTemplate generates handler test template
 func HandlerTestTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package tests
+	return `package tests
 
 import (
-	"testing"
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"testing"
+
 	"github.com/gin-gonic/gin"
-	"%s/%s/%s/handler"
-	"%s/%s/%s/service"
+
+	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/service"
+	"{{ .PackagePath }}/structs"
 )
 
-func TestHandler(t *testing.T) {
+func TestHandlerItemRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	r := gin.New()
 
-	s := service.New(nil, nil)
-	h := handler.New(s)
+	svc := service.NewWithRepository(nil, newFakeRepository())
+	h := handler.New(svc)
 
-	// Register routes
-	// h.RegisterRoutes(r.Group("/api/v1"))
+	router := gin.New()
+	h.RegisterRoutes(router.Group("/api/{{ .Name }}"))
 
-	t.Run("list items", func(t *testing.T) {
-		// Setup route
-		r.GET("/items", h.List)
+	createBody := []byte(` + "`" + `{"name":"Handler Item","code":"HANDLER"}` + "`" + `)
+	createRecorder := httptest.NewRecorder()
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/{{ .Name }}/items", bytes.NewReader(createBody))
+	createRequest.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(createRecorder, createRequest)
+	if createRecorder.Code != http.StatusCreated {
+		t.Fatalf("expected create status %d, got %d: %s", http.StatusCreated, createRecorder.Code, createRecorder.Body.String())
+	}
 
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/items", nil)
+	var created structs.ItemResponse
+	if err := json.Unmarshal(createRecorder.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.ID == "" || created.Name != "Handler Item" {
+		t.Fatalf("unexpected created item: %+v", created)
+	}
 
-		r.ServeHTTP(w, req)
+	listRecorder := httptest.NewRecorder()
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/{{ .Name }}/items?page_size=10&page_num=1", nil)
+	router.ServeHTTP(listRecorder, listRequest)
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("expected list status %d, got %d: %s", http.StatusOK, listRecorder.Code, listRecorder.Body.String())
+	}
 
-		if w.Code != http.StatusOK {
-			t.Errorf("want status 200, got %%d", w.Code)
-		}
-	})
-}`, moduleName, extType, name, moduleName, extType, name)
+	updateBody := []byte(` + "`" + `{"name":"Updated Handler Item","status":"disabled"}` + "`" + `)
+	updateRecorder := httptest.NewRecorder()
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/{{ .Name }}/items/"+created.ID, bytes.NewReader(updateBody))
+	updateRequest.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(updateRecorder, updateRequest)
+	if updateRecorder.Code != http.StatusOK {
+		t.Fatalf("expected update status %d, got %d: %s", http.StatusOK, updateRecorder.Code, updateRecorder.Body.String())
+	}
+
+	deleteRecorder := httptest.NewRecorder()
+	deleteRequest := httptest.NewRequest(http.MethodDelete, "/api/{{ .Name }}/items/"+created.ID, nil)
+	router.ServeHTTP(deleteRecorder, deleteRequest)
+	if deleteRecorder.Code != http.StatusOK {
+		t.Fatalf("expected delete status %d, got %d: %s", http.StatusOK, deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+}
+`
 }
 
-// ServiceTestTemplate generates service test template
 func ServiceTestTemplate(name, extType, moduleName string) string {
-	return fmt.Sprintf(`package tests
+	return `package tests
 
 import (
-	"testing"
 	"context"
-	"%s/%s/%s/service"
-	"%s/%s/%s/structs"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"{{ .PackagePath }}/data/repository"
+	"{{ .PackagePath }}/service"
+	"{{ .PackagePath }}/structs"
 )
 
-func TestService(t *testing.T) {
+func TestServiceItemLifecycle(t *testing.T) {
 	ctx := context.Background()
-	s := service.New(nil, nil)
+	svc := service.NewWithRepository(nil, newFakeRepository())
 
-	t.Run("create item", func(t *testing.T) {
-		req := &structs.CreateItemRequest{
-			Name: "Test Item",
-			Code: "TEST001",
-		}
-
-		resp, err := s.Create(ctx, req)
-		if err != nil {
-			t.Errorf("unexpected error: %%v", err)
-		}
-		if resp == nil {
-			t.Error("response should not be nil")
-		}
-		if resp.Name != req.Name {
-			t.Errorf("want name %%s, got %%s", req.Name, resp.Name)
-		}
+	created, err := svc.Create(ctx, &structs.CreateItemRequest{
+		Name:   "Service Item",
+		Code:   "SVC",
+		Status: "active",
 	})
-}`, moduleName, extType, name, moduleName, extType, name)
+	if err != nil {
+		t.Fatalf("create item: %v", err)
+	}
+	if created.ID == "" {
+		t.Fatal("expected created item ID")
+	}
+
+	updated, err := svc.Update(ctx, &structs.UpdateItemRequest{
+		ID:     created.ID,
+		Name:   "Updated Service Item",
+		Status: "disabled",
+	})
+	if err != nil {
+		t.Fatalf("update item: %v", err)
+	}
+	if updated.Name != "Updated Service Item" || updated.Status != "disabled" {
+		t.Fatalf("unexpected updated item: %+v", updated)
+	}
+
+	items, total, err := svc.List(ctx, &structs.ListItemsRequest{PageSize: 10, PageNum: 1})
+	if err != nil {
+		t.Fatalf("list items: %v", err)
+	}
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("expected one listed item, got total=%d len=%d", total, len(items))
+	}
+
+	if err := svc.Delete(ctx, created.ID); err != nil {
+		t.Fatalf("delete item: %v", err)
+	}
+	if _, err := svc.Get(ctx, created.ID); !errors.Is(err, service.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestServiceValidation(t *testing.T) {
+	svc := service.NewWithRepository(nil, newFakeRepository())
+	if _, err := svc.Create(context.Background(), &structs.CreateItemRequest{}); !errors.Is(err, service.ErrInvalidRequest) {
+		t.Fatalf("expected invalid request error, got %v", err)
+	}
+}
+
+type fakeRepository struct {
+	mu     sync.RWMutex
+	nextID int
+	items  map[string]*structs.Item
+}
+
+func newFakeRepository() repository.RepositoryInterface {
+	return &fakeRepository{
+		items: make(map[string]*structs.Item),
+	}
+}
+
+func (r *fakeRepository) Create(ctx context.Context, item *structs.Item) (*structs.Item, error) {
+	if item == nil || strings.TrimSpace(item.Name) == "" {
+		return nil, repository.ErrInvalidItem
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.nextID++
+	clone := cloneItem(item)
+	if clone.ID == "" {
+		clone.ID = fmt.Sprintf("item-%d", r.nextID)
+	}
+	if clone.Status == "" {
+		clone.Status = "active"
+	}
+	now := time.Now().UTC()
+	if clone.CreatedAt.IsZero() {
+		clone.CreatedAt = now
+	}
+	if clone.UpdatedAt.IsZero() {
+		clone.UpdatedAt = now
+	}
+	r.items[clone.ID] = clone
+	return cloneItem(clone), nil
+}
+
+func (r *fakeRepository) Get(ctx context.Context, id string) (*structs.Item, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	item, ok := r.items[id]
+	if !ok || item.DeletedAt != nil {
+		return nil, repository.ErrNotFound
+	}
+	return cloneItem(item), nil
+}
+
+func (r *fakeRepository) Update(ctx context.Context, item *structs.Item) (*structs.Item, error) {
+	if item == nil || strings.TrimSpace(item.ID) == "" {
+		return nil, repository.ErrInvalidItem
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, ok := r.items[item.ID]
+	if !ok || current.DeletedAt != nil {
+		return nil, repository.ErrNotFound
+	}
+	next := cloneItem(item)
+	next.CreatedAt = current.CreatedAt
+	next.UpdatedAt = time.Now().UTC()
+	r.items[next.ID] = next
+	return cloneItem(next), nil
+}
+
+func (r *fakeRepository) Delete(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	item, ok := r.items[id]
+	if !ok || item.DeletedAt != nil {
+		return repository.ErrNotFound
+	}
+	now := time.Now().UTC()
+	item.DeletedAt = &now
+	item.UpdatedAt = now
+	return nil
+}
+
+func (r *fakeRepository) List(ctx context.Context, params *structs.ListItemsRequest) ([]*structs.Item, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	items := make([]*structs.Item, 0, len(r.items))
+	for _, item := range r.items {
+		if item.DeletedAt == nil {
+			items = append(items, cloneItem(item))
+		}
+	}
+	return items, int64(len(items)), nil
+}
+
+func (r *fakeRepository) Count(ctx context.Context, params *structs.ListItemsRequest) (int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var total int64
+	for _, item := range r.items {
+		if item.DeletedAt == nil {
+			total++
+		}
+	}
+	return total, nil
+}
+
+func cloneItem(item *structs.Item) *structs.Item {
+	if item == nil {
+		return nil
+	}
+	clone := *item
+	if item.Extras != nil {
+		clone.Extras = make(map[string]any, len(item.Extras))
+		for key, value := range item.Extras {
+			clone.Extras[key] = value
+		}
+	}
+	return &clone
+}
+`
 }

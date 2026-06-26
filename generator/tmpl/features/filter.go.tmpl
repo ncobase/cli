@@ -11,19 +11,19 @@ import (
 type FilterOperator string
 
 const (
-	OperatorEq       FilterOperator = "eq"      // Equal
-	OperatorNe       FilterOperator = "ne"      // Not equal
-	OperatorGt       FilterOperator = "gt"      // Greater than
-	OperatorGte      FilterOperator = "gte"     // Greater than or equal
-	OperatorLt       FilterOperator = "lt"      // Less than
-	OperatorLte      FilterOperator = "lte"     // Less than or equal
-	OperatorIn       FilterOperator = "in"      // In array
-	OperatorNin      FilterOperator = "nin"     // Not in array
-	OperatorLike     FilterOperator = "like"    // Like (contains)
-	OperatorNotLike  FilterOperator = "notlike" // Not like
-	OperatorIsNull   FilterOperator = "isnull"  // Is null
-	OperatorNotNull  FilterOperator = "notnull" // Not null
-	OperatorBetween  FilterOperator = "between" // Between
+	OperatorEq      FilterOperator = "eq"      // Equal
+	OperatorNe      FilterOperator = "ne"      // Not equal
+	OperatorGt      FilterOperator = "gt"      // Greater than
+	OperatorGte     FilterOperator = "gte"     // Greater than or equal
+	OperatorLt      FilterOperator = "lt"      // Less than
+	OperatorLte     FilterOperator = "lte"     // Less than or equal
+	OperatorIn      FilterOperator = "in"      // In array
+	OperatorNin     FilterOperator = "nin"     // Not in array
+	OperatorLike    FilterOperator = "like"    // Like (contains)
+	OperatorNotLike FilterOperator = "notlike" // Not like
+	OperatorIsNull  FilterOperator = "isnull"  // Is null
+	OperatorNotNull FilterOperator = "notnull" // Not null
+	OperatorBetween FilterOperator = "between" // Between
 )
 
 // Filter represents a filter condition
@@ -109,39 +109,39 @@ func BuildSQLWhere(filters []Filter) (string, []interface{}) {
 	var args []interface{}
 
 	for i, filter := range filters {
-		placeholder := fmt.Sprintf("$%d", i+1)
+		parameter := fmt.Sprintf("$%d", i+1)
 
 		switch filter.Operator {
 		case OperatorEq:
-			conditions = append(conditions, fmt.Sprintf("%s = %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s = %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorNe:
-			conditions = append(conditions, fmt.Sprintf("%s != %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s != %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorGt:
-			conditions = append(conditions, fmt.Sprintf("%s > %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s > %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorGte:
-			conditions = append(conditions, fmt.Sprintf("%s >= %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s >= %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorLt:
-			conditions = append(conditions, fmt.Sprintf("%s < %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s < %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorLte:
-			conditions = append(conditions, fmt.Sprintf("%s <= %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s <= %s", filter.Field, parameter))
 			args = append(args, filter.Value)
 
 		case OperatorLike:
-			conditions = append(conditions, fmt.Sprintf("%s LIKE %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s LIKE %s", filter.Field, parameter))
 			args = append(args, fmt.Sprintf("%%%v%%", filter.Value))
 
 		case OperatorNotLike:
-			conditions = append(conditions, fmt.Sprintf("%s NOT LIKE %s", filter.Field, placeholder))
+			conditions = append(conditions, fmt.Sprintf("%s NOT LIKE %s", filter.Field, parameter))
 			args = append(args, fmt.Sprintf("%%%v%%", filter.Value))
 
 		case OperatorIsNull:

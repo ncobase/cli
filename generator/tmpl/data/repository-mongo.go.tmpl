@@ -1,0 +1,48 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"{{ .PackagePath }}/data/model"
+)
+
+const (
+	exampleDatabase   = "{{ .Name }}"
+	exampleCollection = "examples"
+)
+
+// FindExample finds an example document by ID using MongoDB.
+func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
+	coll, err := r.d.Collection(exampleDatabase, exampleCollection, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var item model.Example
+	if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&item); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			if id == "" {
+				id = uuid.NewString()
+			}
+			now := time.Now().UTC()
+			item = model.Example{
+				ID:        id,
+				Name:      "Example Model",
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if _, err := coll.InsertOne(ctx, item); err != nil {
+				return nil, err
+			}
+			return &item, nil
+		}
+		return nil, err
+	}
+	return &item, nil
+}

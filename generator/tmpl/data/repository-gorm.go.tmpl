@@ -2,18 +2,37 @@ package repository
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+
 	"{{ .PackagePath }}/data/model"
 )
 
-// FindExample finds an example by ID using GORM
+// FindExample finds an example by ID using GORM.
 func (r *repository) FindExample(ctx context.Context, id string) (*model.Example, error) {
-	// Access database via r.d.GormClient (master) or r.d.GormRead (read replica)
+	db := r.d.GetGormClientWithFallback(ctx, true)
+	var item model.Example
+	if err := db.WithContext(ctx).First(&item, "id = ?", id).Error; err == nil {
+		return &item, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 
-	// Example implementation would go here
-	_ = id
-
-	return nil, fmt.Errorf("not implemented")
+	if id == "" {
+		id = uuid.NewString()
+	}
+	now := time.Now().UTC()
+	item = model.Example{
+		ID:        id,
+		Name:      "Example Model",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := r.d.GetMasterGormClient().WithContext(ctx).Create(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
 }

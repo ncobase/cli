@@ -9,6 +9,7 @@ import (
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/data"
 	"github.com/ncobase/ncore/logging/logger"
+	"{{ .PackagePath }}/data/model"
 {{- if .DBDriver }}
 	_ "github.com/ncobase/ncore/data/{{ .DBDriver }}"
 {{- end }}
@@ -30,20 +31,16 @@ import (
 {{- if .UseRabbitMQ }}
 	_ "github.com/ncobase/ncore/data/rabbitmq"
 {{- end }}
-{{- if .UseS3Storage }}
-	_ "github.com/ncobase/ncore/data/s3"
-{{- end }}
-{{- if .UseMinio }}
-	_ "github.com/ncobase/ncore/data/minio"
-{{- end }}
-{{- if .UseAliyun }}
-	_ "github.com/ncobase/ncore/data/aliyun"
-{{- end }}
 
+{{- if eq .DBDriver "mysql" }}
 	"gorm.io/driver/mysql"
+{{- end }}
+{{- if eq .DBDriver "postgres" }}
 	"gorm.io/driver/postgres"
+{{- end }}
+{{- if eq .DBDriver "sqlite" }}
 	"gorm.io/driver/sqlite"
-	"gorm.io/driver/sqlserver"
+{{- end }}
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -71,7 +68,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 	}
 
 	// create master GORM client
-	gormClient, err := newGormClient(masterDB, conf.Database.Master, env...)
+	gormClient, err := newGormClient(masterDB, conf.Database.Master, conf.Database.Migrate, env...)
 	if err != nil {
 		return nil, cleanup, fmt.Errorf("failed to create master GORM client: %v", err)
 	}
@@ -80,7 +77,7 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 	var gormClientRead *gorm.DB
 	if readDB, err := d.GetSlaveDB(); err == nil && readDB != nil {
 		if readDB != masterDB {
-			gormClientRead, err = newGormClient(readDB, conf.Database.Master, env...)
+			gormClientRead, err = newGormClient(readDB, conf.Database.Master, false, env...)
 			if err != nil {
 				logger.Warnf(ctx, "Failed to create read-only GORM client, will use master for reads: %v", err)
 				gormClientRead = gormClient // fallback to master
@@ -102,24 +99,32 @@ func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) 
 }
 
 // newGormClient creates a new GORM client
-func newGormClient(db *sql.DB, conf *config.DBNode, env ...string) (*gorm.DB, error) {
+func newGormClient(db *sql.DB, conf *config.DBNode, enableMigrate bool, env ...string) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 
 	switch conf.Driver {
 	case "postgres", "postgresql":
+{{- if eq .DBDriver "postgres" }}
 		dialector = postgres.New(postgres.Config{
 			Conn: db,
 		})
+{{- else }}
+		return nil, fmt.Errorf("postgres support was not generated for this service")
+{{- end }}
 	case "mysql":
+{{- if eq .DBDriver "mysql" }}
 		dialector = mysql.New(mysql.Config{
 			Conn: db,
 		})
+{{- else }}
+		return nil, fmt.Errorf("mysql support was not generated for this service")
+{{- end }}
 	case "sqlite", "sqlite3":
+{{- if eq .DBDriver "sqlite" }}
 		dialector = sqlite.Open(conf.Source)
-	case "sqlserver", "mssql":
-		dialector = sqlserver.New(sqlserver.Config{
-			Conn: db,
-		})
+{{- else }}
+		return nil, fmt.Errorf("sqlite support was not generated for this service")
+{{- end }}
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", conf.Driver)
 	}
@@ -145,11 +150,10 @@ func newGormClient(db *sql.DB, conf *config.DBNode, env ...string) (*gorm.DB, er
 	}
 
 	// Auto migrate
-	if conf.Migrate {
-		// Add your models here for auto-migration
-		// if err := client.AutoMigrate(&YourModel{}); err != nil {
-		//     return nil, fmt.Errorf("failed to migrate schema: %v", err)
-		// }
+	if enableMigrate {
+		if err := client.AutoMigrate(&model.Example{}); err != nil {
+			return nil, fmt.Errorf("failed to migrate schema: %v", err)
+		}
 	}
 
 	return client, nil

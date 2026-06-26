@@ -5,7 +5,7 @@ import (
 	"github.com/ncobase/ncore/net/resp"
 )
 
-// GetExample is an example handler
+// GetExample returns the generated example resource.
 func (h *handler) GetExample(c *gin.Context) {
 	result, err := h.svc.GetExample(c.Request.Context())
 	if err != nil {

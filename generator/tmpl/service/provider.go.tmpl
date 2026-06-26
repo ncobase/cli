@@ -9,10 +9,8 @@ import (
 
 // Interface defines the service interface
 type Interface interface {
-	// Example method
+	// GetExample returns the generated example resource.
 	GetExample(ctx context.Context) (*model.ExampleResponse, error)
-
-	// Add your service methods here
 
 	// Cleanup
 	Close() error

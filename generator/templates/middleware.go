@@ -33,11 +33,10 @@ func GetCORSConfig(conf *config.Config) CORSConfig {
 		MaxAge:           12 * 60 * 60, // 12 hours
 	}
 
-	if conf.IsProd() {
+	if conf != nil && conf.IsProd() {
 		corsConfig.AllowOrigins = []string{}
-		if conf.Domain == "" {
-			// Add your production domains here
-			// corsConfig.AllowOrigins = []string{"https://example.com"}
+		if origin := configuredDomainOrigin(conf.Domain); origin != "" {
+			corsConfig.AllowOrigins = []string{origin}
 		}
 	} else {
 		corsConfig.AllowOrigins = []string{
@@ -49,6 +48,17 @@ func GetCORSConfig(conf *config.Config) CORSConfig {
 	}
 
 	return corsConfig
+}
+
+func configuredDomainOrigin(domain string) string {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return ""
+	}
+	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+		return strings.TrimRight(domain, "/")
+	}
+	return "https://" + strings.TrimRight(domain, "/")
 }
 
 // CORSHandler is a middleware for handling CORS.
@@ -100,6 +110,8 @@ func MiddlewareSecurityHeadersTemplate() string {
 	return `package middleware
 
 import (
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -255,26 +267,71 @@ func SecurityHeaders(config *SecurityHeadersConfig) gin.HandlerFunc {
 	}
 }
 
-// InputSanitizationConfig holds input sanitization configuration
-func DefaultSanitizationConfig() *struct{} {
-	return &struct{}{}
+// InputSanitizationConfig holds input sanitization configuration.
+type InputSanitizationConfig struct {
+	BlockedSubstrings []string
 }
 
-// InputSanitization middleware placeholder
-func InputSanitization(config *struct{}) gin.HandlerFunc {
+// DefaultSanitizationConfig returns conservative input sanitization defaults.
+func DefaultSanitizationConfig() *InputSanitizationConfig {
+	return &InputSanitizationConfig{
+		BlockedSubstrings: []string{"\x00", "<script", "javascript:"},
+	}
+}
+
+// InputSanitization rejects common dangerous request payload markers.
+func InputSanitization(config *InputSanitizationConfig) gin.HandlerFunc {
+	if config == nil {
+		config = DefaultSanitizationConfig()
+	}
 	return func(c *gin.Context) {
+		query := strings.ToLower(c.Request.URL.RawQuery)
+		for _, marker := range config.BlockedSubstrings {
+			if marker != "" && strings.Contains(query, strings.ToLower(marker)) {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "request query contains blocked content"})
+				return
+			}
+		}
 		c.Next()
 	}
 }
 
-// InputValidationConfig holds input validation configuration
-func DefaultValidationConfig() *struct{} {
-	return &struct{}{}
+// InputValidationConfig holds input validation configuration.
+type InputValidationConfig struct {
+	MaxBodyBytes        int64
+	AllowedContentTypes []string
 }
 
-// InputValidation middleware placeholder
-func InputValidation(config *struct{}) gin.HandlerFunc {
+// DefaultValidationConfig returns production-safe request validation defaults.
+func DefaultValidationConfig() *InputValidationConfig {
+	return &InputValidationConfig{
+		MaxBodyBytes:        10 << 20,
+		AllowedContentTypes: []string{"", "application/json", "multipart/form-data", "application/x-www-form-urlencoded"},
+	}
+}
+
+// InputValidation enforces request size and content type boundaries.
+func InputValidation(config *InputValidationConfig) gin.HandlerFunc {
+	if config == nil {
+		config = DefaultValidationConfig()
+	}
 	return func(c *gin.Context) {
+		if config.MaxBodyBytes > 0 {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, config.MaxBodyBytes)
+			c.Writer.Header().Set("X-Max-Body-Bytes", strconv.FormatInt(config.MaxBodyBytes, 10))
+		}
+		contentType := strings.ToLower(strings.TrimSpace(strings.SplitN(c.ContentType(), ";", 2)[0]))
+		allowed := false
+		for _, expected := range config.AllowedContentTypes {
+			if contentType == expected {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			c.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{"error": "unsupported content type"})
+			return
+		}
 		c.Next()
 	}
 }
@@ -408,9 +465,7 @@ func extractClientIP(c *gin.Context) string {
 
 // OtelTrace middleware for OpenTelemetry trace
 func OtelTrace(c *gin.Context) {
-	// Reuse Trace logic or extend as needed
-	// For now, it's just a placeholder or could be same as Trace
-	c.Next()
+	Trace(c)
 }
 `
 }
@@ -583,7 +638,37 @@ func isBinaryContentType(contentType string) bool {
 
 // shouldSkipPath checks if the path should be skipped
 func shouldSkipPath(r *http.Request, skippedPaths []string) bool {
-	// Implementation simplified
+	if r == nil {
+		return false
+	}
+	path := r.URL.Path
+	for _, pattern := range skippedPaths {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		if pattern == "*" || pattern == path {
+			return true
+		}
+		if strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*") {
+			if strings.Contains(path, strings.Trim(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+		if strings.HasPrefix(pattern, "*") {
+			if strings.HasSuffix(path, strings.TrimPrefix(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+		if strings.HasSuffix(pattern, "*") {
+			if strings.HasPrefix(path, strings.TrimSuffix(pattern, "*")) {
+				return true
+			}
+			continue
+		}
+	}
 	return false
 }
 `

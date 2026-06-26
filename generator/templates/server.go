@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"%s/internal/middleware"
-
 	"github.com/ncobase/ncore/config"
 	extm "github.com/ncobase/ncore/extension/manager"
 	"github.com/ncobase/ncore/logging/logger"
@@ -82,7 +80,7 @@ func initExtensionManager(ctx context.Context, conf *config.Config) (*extm.Manag
 
 	return em, nil
 }
-`, packagePath)
+`)
 }
 
 // ServerHTTPTemplate generates the http.go file
@@ -90,9 +88,7 @@ func ServerHTTPTemplate(packagePath string) string {
 	return fmt.Sprintf(`package server
 
 import (
-	"context"
 	"net/http"
-	"time"
 
 	"%s/internal/middleware"
 
@@ -100,29 +96,29 @@ import (
 	"github.com/ncobase/ncore/config"
 	"github.com/ncobase/ncore/ecode"
 	ext "github.com/ncobase/ncore/extension/types"
-	"github.com/ncobase/ncore/logging/logger"
 	"github.com/ncobase/ncore/net/resp"
 )
 
 // HTTPConfig holds HTTP server configuration
 type HTTPConfig struct {
 	Mode        string
-	IsProd      bool
 	Middlewares []gin.HandlerFunc
 }
 
 // newHTTPHandler creates HTTP handler with middleware chain
 func newHTTPHandler(conf *config.Config, em ext.ManagerInterface) (http.Handler, error) {
-	// ... whitelist logic ...
-
-	// Validate and set gin mode
 	ginMode := validateGinMode(conf)
 
 	httpConf := &HTTPConfig{
 		Mode:   ginMode,
-		IsProd: conf.IsProd(),
 		Middlewares: []gin.HandlerFunc{
-			// ... middlewares ...
+			gin.Recovery(),
+			middleware.CORSHandler(conf),
+			middleware.SecurityHeaders(nil),
+			middleware.InputValidation(nil),
+			middleware.InputSanitization(nil),
+			middleware.ClientInfo,
+			middleware.Logger,
 		},
 	}
 
@@ -131,39 +127,18 @@ func newHTTPHandler(conf *config.Config, em ext.ManagerInterface) (http.Handler,
 
 // createGinEngine creates and configures Gin engine
 func createGinEngine(conf *HTTPConfig, em ext.ManagerInterface, config *config.Config) (*gin.Engine, error) {
-	// Set gin mode
-	if conf.IsProd {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
-	}
+	gin.SetMode(conf.Mode)
 
-	// Create gin engine
 	engine := gin.New()
 
-	// Register basic middlewares
 	for _, mw := range conf.Middlewares {
 		engine.Use(mw)
 	}
 
-	// 3. Session management
-	if err := setupSessionMiddleware(config, engine, em); err != nil {
-		logger.Warnf(context.Background(), "Failed to setup session middleware: %%v", err)
-	}
-
-	// 4. Space context
-	// engine.Use(middleware.ConsumeSpace(em, config.Auth.Whitelist))
-
-	// 5. Authorization
-	// engine.Use(middleware.CasbinAuthorized(em, config.Auth.Whitelist))
-
-	// Register all specific routes
 	em.RegisterRoutes(engine)
 
-	// Extension management routes
-	if config.Extension.HotReload || config.Extension.Metrics.Enabled {
-		// engine.Group("/ncore", middleware.AuthenticatedUser).GET("/...", ...)
-		// em.ManageRoutes(engine.Group("/ncore"))
+	if config.Extension != nil && (config.Extension.HotReload || (config.Extension.Metrics != nil && config.Extension.Metrics.Enabled)) {
+		em.ManageRoutes(engine.Group("/ncore"))
 	}
 
 	engine.GET("/", func(c *gin.Context) {
@@ -174,27 +149,6 @@ func createGinEngine(conf *HTTPConfig, em ext.ManagerInterface, config *config.C
 
 	setupNoRouteHandler(engine)
 	return engine, nil
-}
-
-// setupSessionMiddleware sets up session management
-func setupSessionMiddleware(conf *config.Config, engine *gin.Engine, em ext.ManagerInterface) error {
-	// Session tracking and validation
-	// engine.Use(middleware.SessionMiddleware(em))
-	// engine.Use(middleware.ValidateSessionMiddleware(em))
-
-	// Optional session limits
-	// if conf.Auth.MaxSessions > 0 {
-	// 	engine.Use(middleware.SessionLimitMiddleware(em, conf.Auth.MaxSessions))
-	// }
-
-	// Start background cleanup task
-	cleanupInterval := 1 * time.Hour
-	if conf.Auth.SessionCleanupInterval > 0 {
-		cleanupInterval = time.Duration(conf.Auth.SessionCleanupInterval) * time.Minute
-	}
-
-	// go middleware.SessionCleanupTask(context.Background(), em, cleanupInterval)
-	return nil
 }
 
 // setupNoRouteHandler configures 404 handler
@@ -224,13 +178,10 @@ func validateGinMode(conf *config.Config) string {
 
 // ServerExtsTemplate generates the exts.go file
 func ServerExtsTemplate(packagePath string) string {
-	return fmt.Sprintf(`package server
+	return `package server
 
 import (
 	"context"
-	
-	// Register your modules here
-	// _ "%s/biz"
 
 	ext "github.com/ncobase/ncore/extension/types"
 	"github.com/ncobase/ncore/logging/logger"
@@ -240,9 +191,9 @@ import (
 func registerExtensions(em ext.ManagerInterface) {
 	// Registration is handled by the registry system through init() functions
 	if err := em.InitExtensions(); err != nil {
-		logger.Errorf(context.Background(), "Failed to initialize extensions: %%v", err)
+		logger.Errorf(context.Background(), "Failed to initialize extensions: %v", err)
 		return
 	}
 }
-`, packagePath)
+`
 }

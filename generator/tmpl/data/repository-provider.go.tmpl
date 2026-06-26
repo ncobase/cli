@@ -9,10 +9,8 @@ import (
 
 // Interface defines the repository interface
 type Interface interface {
-	// Example method
+	// FindExample returns the generated example resource.
 	FindExample(ctx context.Context, id string) (*model.Example, error)
-
-	// Add your repository methods here
 }
 
 // repository implements the Interface

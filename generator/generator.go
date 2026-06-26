@@ -4,6 +4,7 @@ package generator
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/ncobase/cli/generator/templates"
 	"github.com/ncobase/cli/utils"
@@ -53,11 +54,8 @@ func Generate(opts *Options) error {
 		return fmt.Errorf("invalid name: %s", opts.Name)
 	}
 
-	if opts.UseMongo && opts.DBDriver == "" {
-		opts.DBDriver = "mongodb"
-	}
-	if opts.DBDriver == "" && (opts.UseEnt || opts.UseGorm) {
-		opts.DBDriver = "all"
+	if err := normalizeOptions(opts); err != nil {
+		return err
 	}
 
 	outputPath, err := resolveOutputPath(opts)
@@ -109,7 +107,7 @@ func Generate(opts *Options) error {
 			return err
 		}
 		if err := initializeGoModule(basePath, data, opts); err != nil {
-			fmt.Printf("Warning: failed to initialize Go module: %v\n", err)
+			return err
 		}
 		fmt.Printf("Successfully generated standalone application '%s' in %s\n", data.Name, getDesc(data))
 		return nil
@@ -125,11 +123,68 @@ func Generate(opts *Options) error {
 			return err
 		}
 		if err := initializeGoModule(basePath, data, opts); err != nil {
-			fmt.Printf("Warning: failed to initialize Go module: %v\n", err)
+			return err
 		}
 	}
 
 	fmt.Printf("Successfully generated '%s' in %s\n", data.Name, getDesc(data))
+	return nil
+}
+
+func normalizeOptions(opts *Options) error {
+	opts.DBDriver = strings.ToLower(strings.TrimSpace(opts.DBDriver))
+
+	if opts.UseEnt && opts.UseGorm {
+		return fmt.Errorf("use either --use-ent or --use-gorm, not both")
+	}
+	if opts.UseMongo && (opts.UseEnt || opts.UseGorm) {
+		return fmt.Errorf("use --use-mongo without --use-ent or --use-gorm")
+	}
+
+	if opts.DBDriver == "postgresql" {
+		opts.DBDriver = "postgres"
+	}
+	if opts.DBDriver == "sqlite3" {
+		opts.DBDriver = "sqlite"
+	}
+
+	if opts.DBDriver == "mongodb" {
+		opts.UseMongo = true
+	}
+	if opts.UseMongo {
+		opts.DBDriver = "mongodb"
+	}
+
+	needsStandaloneData := opts.Standalone || opts.WithCmd
+	if opts.DBDriver != "" && opts.DBDriver != "none" && !opts.UseMongo && !opts.UseEnt && !opts.UseGorm {
+		opts.UseEnt = true
+	}
+	if needsStandaloneData && !opts.UseMongo && !opts.UseEnt && !opts.UseGorm {
+		opts.UseEnt = true
+		opts.DBDriver = "sqlite"
+	}
+	if (opts.UseEnt || opts.UseGorm) && opts.DBDriver == "" {
+		opts.DBDriver = "sqlite"
+	}
+
+	if opts.UseEnt || opts.UseGorm {
+		switch opts.DBDriver {
+		case "postgres", "mysql", "sqlite":
+		default:
+			return fmt.Errorf("database driver %q is not supported with SQL ORM; supported drivers are postgres, mysql, sqlite", opts.DBDriver)
+		}
+	}
+	if opts.UseMongo && opts.DBDriver != "mongodb" {
+		return fmt.Errorf("MongoDB projects must use --db mongodb")
+	}
+	if opts.DBDriver != "" && opts.DBDriver != "none" {
+		switch opts.DBDriver {
+		case "postgres", "mysql", "sqlite", "mongodb", "neo4j":
+		default:
+			return fmt.Errorf("unsupported database driver %q", opts.DBDriver)
+		}
+	}
+
 	return nil
 }
 
@@ -155,16 +210,16 @@ func createCmdStructure(basePath string, data *templates.Data) error {
 	}
 
 	files := map[string]string{
-		"cmd/main.go":                         templates.CmdMainTemplate(data),
-		"internal/server/server.go":           templates.ServerTemplate(data.PackagePath),
-		"internal/server/http.go":             templates.ServerHTTPTemplate(data.PackagePath),
-		"internal/server/exts.go":             templates.ServerExtsTemplate(data.PackagePath),
-		"internal/middleware/cors.go":         templates.MiddlewareCORSTemplate(),
+		"cmd/main.go":                             templates.CmdMainTemplate(data),
+		"internal/server/server.go":               templates.ServerTemplate(data.PackagePath),
+		"internal/server/http.go":                 templates.ServerHTTPTemplate(data.PackagePath),
+		"internal/server/exts.go":                 templates.ServerExtsTemplate(data.PackagePath),
+		"internal/middleware/cors.go":             templates.MiddlewareCORSTemplate(),
 		"internal/middleware/security_headers.go": templates.MiddlewareSecurityHeadersTemplate(),
-		"internal/middleware/trace.go":        templates.MiddlewareTraceTemplate(),
-		"internal/middleware/logger.go":       templates.MiddlewareLoggerTemplate(),
-		"internal/middleware/client_info.go":  templates.MiddlewareClientInfoTemplate(),
-		"internal/version/version.go":         templates.VersionTemplate(),
+		"internal/middleware/trace.go":            templates.MiddlewareTraceTemplate(),
+		"internal/middleware/logger.go":           templates.MiddlewareLoggerTemplate(),
+		"internal/middleware/client_info.go":      templates.MiddlewareClientInfoTemplate(),
+		"internal/version/version.go":             templates.VersionTemplate(),
 	}
 
 	for filePath, tmpl := range files {

@@ -116,12 +116,12 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 	if err := renderFile("CORS middleware", "internal/middleware/cors.go", registry.RenderMiddlewareCORS); err != nil {
 		return err
 	}
+	if err := renderFile("middleware utils", "internal/middleware/utils.go", registry.RenderMiddlewareUtils); err != nil {
+		return err
+	}
 
 	if data.WithTracing {
 		if err := renderFile("Trace middleware", "internal/middleware/trace.go", registry.RenderMiddlewareTrace); err != nil {
-			return err
-		}
-		if err := renderFile("middleware utils", "internal/middleware/utils.go", registry.RenderMiddlewareUtils); err != nil {
 			return err
 		}
 	}
@@ -137,12 +137,16 @@ func createStandaloneStructure(basePath string, data *templates.Data) error {
 	}
 
 	if data.WithTest {
-		files["tests/handler_test.go"] = templates.StandaloneHandlerTestTemplate(data.Name, data.ModuleName)
-		files["tests/service_test.go"] = templates.StandaloneServiceTestTemplate(data.Name, data.ModuleName)
+		if err := renderFile("handler test", "tests/handler_test.go", registry.RenderHandlerTest); err != nil {
+			return err
+		}
+		if err := renderFile("service test", "tests/service_test.go", registry.RenderServiceTest); err != nil {
+			return err
+		}
 	}
 
 	if data.UseEnt {
-		if err := renderFile("schema", "data/schema/user.go", registry.RenderSchema); err != nil {
+		if err := renderFile("schema", "data/schema/example.go", registry.RenderSchema); err != nil {
 			return err
 		}
 		if err := renderFile("generate.go", "generate.go", registry.RenderGenerate); err != nil {

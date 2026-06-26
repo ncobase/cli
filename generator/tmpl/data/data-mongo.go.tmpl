@@ -1,0 +1,67 @@
+package data
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ncobase/ncore/config"
+	"github.com/ncobase/ncore/data"
+	"github.com/ncobase/ncore/logging/logger"
+	_ "github.com/ncobase/ncore/data/mongodb"
+{{- if .UseRedis }}
+	_ "github.com/ncobase/ncore/data/redis"
+{{- end }}
+{{- if .UseElastic }}
+	_ "github.com/ncobase/ncore/data/elasticsearch"
+{{- end }}
+{{- if .UseOpenSearch }}
+	_ "github.com/ncobase/ncore/data/opensearch"
+{{- end }}
+{{- if .UseMeili }}
+	_ "github.com/ncobase/ncore/data/meilisearch"
+{{- end }}
+{{- if .UseKafka }}
+	_ "github.com/ncobase/ncore/data/kafka"
+{{- end }}
+{{- if .UseRabbitMQ }}
+	_ "github.com/ncobase/ncore/data/rabbitmq"
+{{- end }}
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+)
+
+// Data represents the data layer.
+type Data struct {
+	*data.Data
+}
+
+// New creates a new data layer instance.
+func New(conf *config.Data, env ...string) (*Data, func(name ...string), error) {
+	d, cleanup, err := data.New(conf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := d.MongoHealthCheck(context.Background()); err != nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil, nil, fmt.Errorf("mongodb health check failed: %w", err)
+	}
+
+	logger.Debug(context.Background(), "MongoDB data layer initialized")
+	return &Data{Data: d}, cleanup, nil
+}
+
+// Collection returns a typed MongoDB collection from the configured manager.
+func (d *Data) Collection(dbName, collectionName string, readOnly bool) (*mongo.Collection, error) {
+	coll, err := d.GetMongoCollection(dbName, collectionName, readOnly)
+	if err != nil {
+		return nil, err
+	}
+	typed, ok := coll.(*mongo.Collection)
+	if !ok || typed == nil {
+		return nil, fmt.Errorf("mongodb collection %s.%s has unexpected type %T", dbName, collectionName, coll)
+	}
+	return typed, nil
+}

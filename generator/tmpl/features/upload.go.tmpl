@@ -5,7 +5,12 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"math"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -20,11 +25,11 @@ import (
 
 // UploadConfig holds upload configuration
 type UploadConfig struct {
-	MaxFileSize   int64    // Maximum file size in bytes
-	AllowedTypes  []string // Allowed MIME types
-	UploadPath    string   // Upload directory path
-	GenerateThumbnail bool // Whether to generate thumbnails for images
-	ThumbnailSizes []ThumbnailSize
+	MaxFileSize       int64    // Maximum file size in bytes
+	AllowedTypes      []string // Allowed MIME types
+	UploadPath        string   // Upload directory path
+	GenerateThumbnail bool     // Whether to generate thumbnails for images
+	ThumbnailSizes    []ThumbnailSize
 }
 
 // ThumbnailSize represents thumbnail dimensions
@@ -65,7 +70,7 @@ func DefaultUploadConfig() *UploadConfig {
 			"application/vnd.ms-excel",
 			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		},
-		UploadPath: "./uploads",
+		UploadPath:        "./uploads",
 		GenerateThumbnail: true,
 		ThumbnailSizes: []ThumbnailSize{
 			{Name: "small", Width: 150, Height: 150},
@@ -120,7 +125,7 @@ func UploadHandler(config *UploadConfig) gin.HandlerFunc {
 		fileInfo, err := saveFile(ctx, file, header, config)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to save file: %v", err)
-			resp.Fail(c.Writer, resp.InternalServerError("Failed to save file"))
+			resp.Fail(c.Writer, resp.InternalServer("Failed to save file"))
 			return
 		}
 
@@ -227,26 +232,103 @@ func isImage(mimeType string) bool {
 
 // generateThumbnails generates image thumbnails
 func generateThumbnails(ctx context.Context, filePath string, sizes []ThumbnailSize) ([]string, error) {
-	// Placeholder implementation
-	// In production, use an image processing library like:
-	// - github.com/disintegration/imaging
-	// - github.com/nfnt/resize
-	// - github.com/h2non/bimg (libvips wrapper)
+	if len(sizes) == 0 {
+		return nil, nil
+	}
 
-	thumbnails := make([]string, 0)
+	sourceFile, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("open image: %w", err)
+	}
+	defer sourceFile.Close()
 
-	// Example implementation would be:
-	// for _, size := range sizes {
-	//     thumbPath := strings.TrimSuffix(filePath, filepath.Ext(filePath)) +
-	//         fmt.Sprintf("_%s%s", size.Name, filepath.Ext(filePath))
-	//
-	//     // Generate thumbnail using image library
-	//     // ...
-	//
-	//     thumbnails = append(thumbnails, thumbPath)
-	// }
+	sourceImage, format, err := image.Decode(sourceFile)
+	if err != nil {
+		return nil, fmt.Errorf("decode image: %w", err)
+	}
+
+	thumbnails := make([]string, 0, len(sizes))
+	for _, size := range sizes {
+		if size.Width <= 0 || size.Height <= 0 {
+			return thumbnails, fmt.Errorf("invalid thumbnail size %s: width and height must be positive", size.Name)
+		}
+
+		thumbnail := resizeToFit(sourceImage, size.Width, size.Height)
+		thumbPath := thumbnailPath(filePath, size)
+
+		outputFile, err := os.Create(thumbPath)
+		if err != nil {
+			return thumbnails, fmt.Errorf("create thumbnail: %w", err)
+		}
+
+		if err := encodeThumbnail(outputFile, thumbnail, format); err != nil {
+			outputFile.Close()
+			os.Remove(thumbPath)
+			return thumbnails, fmt.Errorf("encode thumbnail: %w", err)
+		}
+		if err := outputFile.Close(); err != nil {
+			os.Remove(thumbPath)
+			return thumbnails, fmt.Errorf("close thumbnail: %w", err)
+		}
+
+		logger.Debugf(ctx, "Generated thumbnail %s for %s", thumbPath, filePath)
+		thumbnails = append(thumbnails, thumbPath)
+	}
 
 	return thumbnails, nil
+}
+
+func resizeToFit(src image.Image, maxWidth, maxHeight int) image.Image {
+	bounds := src.Bounds()
+	sourceWidth := bounds.Dx()
+	sourceHeight := bounds.Dy()
+	if sourceWidth <= maxWidth && sourceHeight <= maxHeight {
+		return src
+	}
+
+	scale := math.Min(float64(maxWidth)/float64(sourceWidth), float64(maxHeight)/float64(sourceHeight))
+	targetWidth := max(1, int(math.Round(float64(sourceWidth)*scale)))
+	targetHeight := max(1, int(math.Round(float64(sourceHeight)*scale)))
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+
+	for y := 0; y < targetHeight; y++ {
+		sourceY := bounds.Min.Y + y*sourceHeight/targetHeight
+		for x := 0; x < targetWidth; x++ {
+			sourceX := bounds.Min.X + x*sourceWidth/targetWidth
+			dst.Set(x, y, src.At(sourceX, sourceY))
+		}
+	}
+	return dst
+}
+
+func thumbnailPath(filePath string, size ThumbnailSize) string {
+	name := strings.TrimSpace(size.Name)
+	if name == "" {
+		name = fmt.Sprintf("%dx%d", size.Width, size.Height)
+	}
+	name = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, name)
+
+	ext := filepath.Ext(filePath)
+	base := strings.TrimSuffix(filePath, ext)
+	return fmt.Sprintf("%s_%s%s", base, name, ext)
+}
+
+func encodeThumbnail(w io.Writer, img image.Image, format string) error {
+	switch strings.ToLower(format) {
+	case "jpeg", "jpg":
+		return jpeg.Encode(w, img, &jpeg.Options{Quality: 85})
+	case "png":
+		return png.Encode(w, img)
+	case "gif":
+		return gif.Encode(w, img, nil)
+	default:
+		return fmt.Errorf("unsupported thumbnail format %q", format)
+	}
 }
 
 // MultiUploadHandler handles multiple file uploads
@@ -334,7 +416,7 @@ func DeleteFileHandler(config *UploadConfig) gin.HandlerFunc {
 				resp.Fail(c.Writer, resp.NotFound("File not found"))
 			} else {
 				logger.Errorf(ctx, "Failed to delete file: %v", err)
-				resp.Fail(c.Writer, resp.InternalServerError("Failed to delete file"))
+				resp.Fail(c.Writer, resp.InternalServer("Failed to delete file"))
 			}
 			return
 		}

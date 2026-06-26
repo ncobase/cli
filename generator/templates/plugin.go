@@ -37,7 +37,7 @@ type Plugin struct {
 	em          ext.ManagerInterface
 	conf        *config.Config
 	h           *handler.Handler
-	s           *service.Service
+	s           service.ServiceInterface
 	d           *data.Data
 	cleanup     func(name ...string)
 
@@ -106,7 +106,10 @@ func (p *Plugin) Name() string {
 
 // RegisterRoutes registers routes for the plugin
 func (p *Plugin) RegisterRoutes(r *gin.RouterGroup) {
-	// Implement your route registration logic here
+	if p.h == nil {
+		return
+	}
+	p.h.RegisterRoutes(r.Group("/" + name))
 }
 
 // GetHandlers returns the handlers for the plugin

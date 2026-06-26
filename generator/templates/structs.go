@@ -35,7 +35,7 @@ type CreateItemRequest struct {
 
 // UpdateItemRequest represents the request to update an existing item.
 type UpdateItemRequest struct {
-	ID        string         ` + "`" + `json:"id" binding:"required"` + "`" + `
+	ID        string         ` + "`" + `json:"id"` + "`" + `
 	Name      string         ` + "`" + `json:"name"` + "`" + `
 	Code      string         ` + "`" + `json:"code"` + "`" + `
 	Type      string         ` + "`" + `json:"type"` + "`" + `

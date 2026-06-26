@@ -29,11 +29,10 @@ func GetCORSConfig(conf *config.Config) CORSConfig {
 		MaxAge:           12 * 60 * 60, // 12 hours
 	}
 
-	if conf.IsProd() {
+	if conf != nil && conf.IsProd() {
 		corsConfig.AllowOrigins = []string{}
-		if conf.Domain == "" {
-			// Add your production domains here
-			// corsConfig.AllowOrigins = []string{"https://example.com"}
+		if origin := configuredDomainOrigin(conf.Domain); origin != "" {
+			corsConfig.AllowOrigins = []string{origin}
 		}
 	} else {
 		corsConfig.AllowOrigins = []string{
@@ -45,6 +44,17 @@ func GetCORSConfig(conf *config.Config) CORSConfig {
 	}
 
 	return corsConfig
+}
+
+func configuredDomainOrigin(domain string) string {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return ""
+	}
+	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+		return strings.TrimRight(domain, "/")
+	}
+	return "https://" + strings.TrimRight(domain, "/")
 }
 
 // CORSHandler is a middleware for handling CORS
