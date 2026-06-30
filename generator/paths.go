@@ -73,17 +73,14 @@ func resolveModuleName(opts *Options, outputPath string) string {
 // getBasePath returns the base path for generation
 func getBasePath(opts *Options, outputPath string) string {
 	if opts.Standalone {
-		if opts.Type == "direct" {
-			return filepath.Join(outputPath, opts.Name)
-		} else if opts.Type == "custom" {
-			return filepath.Join(outputPath, opts.CustomDir, opts.Name)
-		}
-		return filepath.Join(outputPath, opts.Type, opts.Name)
+		return filepath.Join(outputPath, opts.Name)
 	}
 
 	switch opts.Type {
 	case "core":
 		return filepath.Join(outputPath, "core", opts.Name)
+	case "biz":
+		return filepath.Join(outputPath, "biz", opts.Name)
 	case "business":
 		return filepath.Join(outputPath, "business", opts.Name)
 	case "plugin":

@@ -39,6 +39,7 @@ type Operation struct {
 type Plan struct {
 	Name               string              `json:"name"`
 	Type               string              `json:"type"`
+	ProjectType        string              `json:"project_type,omitempty"`
 	CustomDir          string              `json:"custom_dir,omitempty"`
 	OutputPath         string              `json:"output_path"`
 	BasePath           string              `json:"base_path"`
@@ -80,9 +81,16 @@ func (r *Result) Text() string {
 	}
 
 	fmt.Fprintf(&b, "Target: %s\n", r.Plan.BasePath)
+	if r.Plan.ProjectType != "" {
+		fmt.Fprintf(&b, "Project type: %s\n", r.Plan.ProjectType)
+	}
 	fmt.Fprintf(&b, "Module: %s\n", r.Plan.ModuleName)
 	fmt.Fprintf(&b, "Package: %s\n", r.Plan.PackagePath)
-	fmt.Fprintf(&b, "Database: %s/%s\n", r.Plan.Database.ORM, r.Plan.Database.Driver)
+	if r.Plan.ProjectType == "modular" && r.Plan.Database.ORM == "none" {
+		fmt.Fprintf(&b, "Database driver: %s\n", r.Plan.Database.Driver)
+	} else {
+		fmt.Fprintf(&b, "Database: %s/%s\n", r.Plan.Database.ORM, r.Plan.Database.Driver)
+	}
 	fmt.Fprintf(&b, "Directories: %d\n", len(r.Plan.Directories))
 	fmt.Fprintf(&b, "Files: %d\n", len(r.Plan.Files))
 

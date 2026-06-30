@@ -149,6 +149,12 @@ func buildStandaloneRenderPlan(data *templates.Data) (*renderPlan, error) {
 
 // getDesc returns the description of the generated component
 func getDesc(data *templates.Data) string {
+	if data.Standalone && data.ProjectType == "modular" {
+		return "modular application"
+	}
+	if data.Standalone {
+		return "standalone application"
+	}
 	if data.Type == "custom" {
 		return fmt.Sprintf("'%s' directory", data.CustomDir)
 	}
@@ -157,6 +163,7 @@ func getDesc(data *templates.Data) string {
 	}
 	extDescriptions := map[string]string{
 		"core":     "Core Domain",
+		"biz":      "Business Domain",
 		"business": "Business Domain",
 		"plugin":   "Plugin Domain",
 		"custom":   "Custom Directory",

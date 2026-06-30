@@ -12,6 +12,7 @@ import (
 	ext "github.com/ncobase/ncore/extension/types"
 	"{{ .PackagePath }}/data"
 	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/router"
 	"{{ .PackagePath }}/service"
 	"sync"
 
@@ -37,6 +38,7 @@ type Plugin struct {
 	em          ext.ManagerInterface
 	conf        *config.Config
 	h           *handler.Handler
+	r           *router.Router
 	s           service.ServiceInterface
 	d           *data.Data
 	cleanup     func(name ...string)
@@ -95,6 +97,7 @@ func (p *Plugin) Init(conf *config.Config, em ext.ManagerInterface) (err error) 
 func (p *Plugin) PostInit() error {
 	p.s = service.New(p.conf, p.d)
 	p.h = handler.New(p.s)
+	p.r = router.New(p.h)
 
 	return nil
 }
@@ -106,10 +109,10 @@ func (p *Plugin) Name() string {
 
 // RegisterRoutes registers routes for the plugin
 func (p *Plugin) RegisterRoutes(r *gin.RouterGroup) {
-	if p.h == nil {
+	if p.r == nil {
 		return
 	}
-	p.h.RegisterRoutes(r.Group("/" + name))
+	p.r.RegisterRoutes(r)
 }
 
 // GetHandlers returns the handlers for the plugin

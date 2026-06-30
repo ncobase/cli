@@ -28,6 +28,7 @@ func NewRegistry() (*Registry, error) {
 type TemplateData struct {
 	Name        string // Extension name
 	Type        string // Extension type (core/business/plugin/custom)
+	ProjectType string // Project type for init output
 	CustomDir   string // Custom directory name, if type is custom
 	ModuleName  string // Go module name
 	UseMongo    bool   // Whether to use MongoDB
@@ -230,6 +231,7 @@ func NewTemplateData(d *templates.Data) *TemplateData {
 	return &TemplateData{
 		Name:          d.Name,
 		Type:          d.Type,
+		ProjectType:   d.ProjectType,
 		CustomDir:     d.CustomDir,
 		ModuleName:    d.ModuleName,
 		UseMongo:      d.UseMongo,

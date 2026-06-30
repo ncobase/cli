@@ -10,7 +10,7 @@ func buildExtensionRenderPlan(data *templates.Data, mainTemplate func(string) st
 	plan := newRenderPlan()
 	directories := []string{
 		"data", "data/repository",
-		"handler", "service", "structs",
+		"handler", "router", "service", "structs",
 	}
 	if data.UseEnt {
 		directories = append(directories, "data/schema")
@@ -41,6 +41,7 @@ func buildExtensionRenderPlan(data *templates.Data, mainTemplate func(string) st
 		"data/data.go":                  selectDataTemplate(*data),
 		"data/repository/provider.go":   templates.RepositoryTemplate(data),
 		"handler/provider.go":           templates.HandlerTemplate(data.Name, data.ExtType, data.ModuleName),
+		"router/provider.go":            templates.RouterTemplate(),
 		"service/provider.go":           templates.ServiceTemplate(data.Name, data.ExtType, data.ModuleName),
 		"structs/structs.go":            templates.StructsTemplate(),
 	}

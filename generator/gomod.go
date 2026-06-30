@@ -92,7 +92,7 @@ func moduleRequirementList(opts *Options) []ModuleRequirement {
 
 func goModuleOperations(basePath string, opts *Options) []Operation {
 	operations := make([]Operation, 0, 3)
-	if opts.UseEnt {
+	if opts.UseEnt && needsEntGeneration(opts) {
 		operations = append(operations,
 			Operation{
 				Name:       "go mod tidy for Ent code generation",
@@ -120,6 +120,10 @@ func goModuleOperations(basePath string, opts *Options) []Operation {
 	})
 
 	return operations
+}
+
+func needsEntGeneration(opts *Options) bool {
+	return !(opts.Standalone && opts.ProjectType == ProjectTypeModular)
 }
 
 func runGoModuleOperations(basePath string, opts *Options) error {

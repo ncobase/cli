@@ -17,7 +17,7 @@ func TestNewCommand_MetadataAndFlags(t *testing.T) {
 		"path", "module", "use-mongo", "use-ent", "use-gorm", "db",
 		"use-redis", "use-elastic", "use-opensearch", "use-meilisearch",
 		"use-kafka", "use-rabbitmq", "use-s3", "use-minio", "use-aliyun",
-		"with-grpc", "with-tracing", "with-test", "dry-run", "output",
+		"type", "with-grpc", "with-tracing", "with-test", "dry-run", "output",
 	}
 
 	for _, name := range requiredFlags {
@@ -54,5 +54,27 @@ func TestNewCommand_TooManyArgsReturnsFriendlyError(t *testing.T) {
 	}
 	if err.Error() != "init requires one application name" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewCommand_ModularDryRunJSON(t *testing.T) {
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"product", "--type", "modular", "--dry-run", "--output", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected modular dry-run to succeed, got error: %v", err)
+	}
+
+	for _, expected := range []string{
+		`"project_type": "modular"`,
+		`"core/doc.go"`,
+		`"biz/doc.go"`,
+		`"internal/server/http.go"`,
+	} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("expected output to contain %s, got %q", expected, output.String())
+		}
 	}
 }

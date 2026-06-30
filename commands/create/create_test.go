@@ -41,6 +41,7 @@ func TestNewCommand_HasExpectedSubcommandsAndFlags(t *testing.T) {
 
 	expectedSubcommands := map[string]bool{
 		"core":     false,
+		"biz":      false,
 		"business": false,
 		"plugin":   false,
 	}
@@ -74,7 +75,7 @@ func TestNewCommand_HasExpectedSubcommandsAndFlags(t *testing.T) {
 
 func TestCreateSubcommandsHaveGenerationFlags(t *testing.T) {
 	cmd := NewCommand()
-	for _, name := range []string{"core", "business", "plugin"} {
+	for _, name := range []string{"core", "biz", "business", "plugin"} {
 		sub, _, err := cmd.Find([]string{name})
 		if err != nil {
 			t.Fatalf("failed to find %s subcommand: %v", name, err)
@@ -200,6 +201,31 @@ func TestCreateCustomDirectoryGeneration(t *testing.T) {
 		filepath.Join(base, "tests/ext_test.go"),
 		filepath.Join(base, "tests/handler_test.go"),
 		filepath.Join(base, "tests/service_test.go"),
+	}
+
+	for _, file := range expectedFiles {
+		if _, err := os.Stat(file); err != nil {
+			t.Fatalf("expected generated file %q, got error: %v", file, err)
+		}
+	}
+}
+
+func TestCreateBizGeneration(t *testing.T) {
+	tmpDir := t.TempDir()
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"biz", "orders", "--path", tmpDir, "--with-test"})
+
+	if err := captureOutput(t, cmd.Execute); err != nil {
+		t.Fatalf("biz create command failed: %v", err)
+	}
+
+	base := filepath.Join(tmpDir, "biz", "orders")
+	expectedFiles := []string{
+		filepath.Join(base, "orders.go"),
+		filepath.Join(base, "handler/provider.go"),
+		filepath.Join(base, "router/provider.go"),
+		filepath.Join(base, "service/provider.go"),
+		filepath.Join(base, "tests/handler_test.go"),
 	}
 
 	for _, file := range expectedFiles {

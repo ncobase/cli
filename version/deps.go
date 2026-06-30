@@ -31,6 +31,7 @@ func GetNcoreDeps() []string {
 		"github.com/ncobase/ncore/net",
 		"github.com/ncobase/ncore/extension",
 		"github.com/ncobase/ncore/data",
+		"github.com/ncobase/ncore/security",
 	}
 }
 

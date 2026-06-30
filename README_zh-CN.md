@@ -38,21 +38,24 @@ nco -h
 nco --help
 ```
 
-`nco init` 创建独立 ncore 应用。`nco create` 为现有项目创建扩展模块。
+`nco init` 创建独立服务或模块化产品后端。`nco create` 为现有项目创建扩展模块。
 迁移和 schema 命令依赖 Atlas。
 
 ## `nco init`
 
-创建独立应用。
+创建应用。默认类型为 `service`；使用 `--type modular` 创建带 `core`、`biz`、
+`plugin` 和 `internal/server` 结构的产品后端。
 
 ```bash
 nco init myapp --db postgres --use-ent --use-redis --with-test
+nco init product --type modular --db postgres --use-redis --use-meilisearch --with-test
 ```
 
 ### 参数
 
 | 参数 | 说明 |
 | --- | --- |
+| `-t, --type` | 初始化类型：`service`、`modular` |
 | `--db` | 数据库驱动：`postgres`、`mysql`、`sqlite`、`mongodb` |
 | `--use-ent` | SQL 数据库使用 Ent |
 | `--use-gorm` | SQL 数据库使用 GORM |
@@ -78,6 +81,7 @@ nco init myapp --db postgres --use-ent --use-redis --with-test
 
 ```bash
 nco init api --db postgres --use-ent --with-test
+nco init product --type modular --db postgres --use-redis --use-meilisearch --with-test
 nco init service --db postgres --use-ent --use-kafka --use-redis
 nco init files --db postgres --use-ent --use-s3
 nco init analytics --db mongodb --use-mongo
@@ -96,6 +100,7 @@ nco create core auth --use-ent --with-test
 | 类型 | 目标路径 | 用途 |
 | --- | --- | --- |
 | `core` | `core/<name>` | 基础领域模块 |
+| `biz` | `biz/<name>` | 产品业务模块 |
 | `business` | `business/<name>` | 应用业务模块 |
 | `plugin` | `plugin/<name>` | 可选集成模块 |
 | 自定义 | `<type>/<name>` | 项目自定义模块分组 |
@@ -120,6 +125,7 @@ nco create core auth --use-ent --with-test
 
 ```bash
 nco create core auth --use-ent --with-test
+nco create biz order --use-ent --with-test
 nco create business order --use-gorm --with-cmd
 nco create plugin payment --use-mongo
 nco create features notification --use-ent
@@ -151,6 +157,31 @@ myapp/
 ```
 
 生成项目遵循 ncore 服务常用的 handler、service、repository 和 data 分层。
+
+## 生成模块化结构
+
+```text
+myapp/
+├── cmd/myapp/
+├── core/
+├── biz/
+├── plugin/
+├── internal/
+│   ├── middleware/
+│   ├── server/
+│   └── version/
+├── migrations/
+├── docs/
+├── tests/
+├── config.yaml
+├── go.mod
+├── Makefile
+└── README.md
+```
+
+模块化应用将进程启动和跨切面 HTTP 组合放在 `internal/server`。领域模块通过
+`nco create` 添加，并在模块内维护 `structs`、`data/schema`、`data/repository`、
+`service`、`handler` 和 `router` 包。
 
 ## 配置
 

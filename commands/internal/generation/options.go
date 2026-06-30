@@ -16,6 +16,7 @@ const (
 // FlagConfig controls which generation flags are attached to a command.
 type FlagConfig struct {
 	Path    bool
+	Type    bool
 	WithCmd bool
 	Group   bool
 }
@@ -24,6 +25,9 @@ type FlagConfig struct {
 func AddFlags(cmd *cobra.Command, cfg FlagConfig) {
 	if cfg.Path {
 		cmd.Flags().StringP("path", "p", "", "output path (defaults to current directory)")
+	}
+	if cfg.Type {
+		cmd.Flags().StringP("type", "t", "service", "init type: service or modular")
 	}
 	cmd.Flags().StringP("module", "m", "", "Go module name")
 
@@ -69,6 +73,11 @@ func ReadFlags(cmd *cobra.Command, opts *generator.Options, cfg FlagConfig) (str
 	}
 	if opts.ModuleName, err = cmd.Flags().GetString("module"); err != nil {
 		return "", err
+	}
+	if cfg.Type {
+		if opts.ProjectType, err = cmd.Flags().GetString("type"); err != nil {
+			return "", err
+		}
 	}
 	if opts.UseMongo, err = cmd.Flags().GetBool("use-mongo"); err != nil {
 		return "", err

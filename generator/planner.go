@@ -10,6 +10,7 @@ func buildTemplateData(opts *Options) *templates.Data {
 	return &templates.Data{
 		Name:          opts.Name,
 		Type:          opts.Type,
+		ProjectType:   opts.ProjectType,
 		UseMongo:      opts.UseMongo,
 		UseEnt:        opts.UseEnt,
 		UseGorm:       opts.UseGorm,
@@ -40,7 +41,15 @@ func buildRenderPlan(opts *Options, data *templates.Data) (*renderPlan, error) {
 	render := newRenderPlan()
 
 	if opts.Standalone {
-		standalone, err := buildStandaloneRenderPlan(data)
+		var (
+			standalone *renderPlan
+			err        error
+		)
+		if opts.ProjectType == ProjectTypeModular {
+			standalone, err = buildModularRenderPlan(data)
+		} else {
+			standalone, err = buildStandaloneRenderPlan(data)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -70,6 +79,7 @@ func buildPlan(opts *Options, data *templates.Data, basePath string, render *ren
 	plan := &Plan{
 		Name:         opts.Name,
 		Type:         opts.Type,
+		ProjectType:  opts.ProjectType,
 		CustomDir:    opts.CustomDir,
 		OutputPath:   opts.OutputPath,
 		BasePath:     basePath,
@@ -161,7 +171,7 @@ func needsGoModule(opts *Options) bool {
 
 func successMessage(plan *Plan) string {
 	if plan.Standalone {
-		return fmt.Sprintf("Successfully generated standalone application %q in %s.", plan.Name, plan.Description)
+		return fmt.Sprintf("Successfully generated %s application %q at %s.", plan.ProjectType, plan.Name, plan.BasePath)
 	}
 	return fmt.Sprintf("Successfully generated %q in %s.", plan.Name, plan.Description)
 }

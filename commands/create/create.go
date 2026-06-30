@@ -11,6 +11,7 @@ import (
 
 var knownTypes = map[string]string{
 	"core":     "core",
+	"biz":      "biz",
 	"business": "business",
 	"plugin":   "plugin",
 }
@@ -24,7 +25,7 @@ func NewCommand() *cobra.Command {
 
 Examples:
   nco create core auth
-  nco create business crm
+  nco create biz crm
   nco create plugin payment`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 2 {
@@ -73,6 +74,7 @@ Examples:
 	}
 
 	cmd.AddCommand(newTypedCommand("core", []string{"c"}, "Create a new extension in core domain"))
+	cmd.AddCommand(newTypedCommand("biz", nil, "Create a new extension in business domain"))
 	cmd.AddCommand(newTypedCommand("business", []string{"b"}, "Create a new extension in business domain"))
 	cmd.AddCommand(newTypedCommand("plugin", []string{"p"}, "Create a new extension in plugin domain"))
 

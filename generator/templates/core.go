@@ -12,6 +12,7 @@ import (
 	ext "github.com/ncobase/ncore/extension/types"
 	"{{ .PackagePath }}/data"
 	"{{ .PackagePath }}/handler"
+	"{{ .PackagePath }}/router"
 	"{{ .PackagePath }}/service"
 	"sync"
 
@@ -37,6 +38,7 @@ type Module struct {
 	em          ext.ManagerInterface
 	conf        *config.Config
 	h           *handler.Handler
+	r           *router.Router
 	s           service.ServiceInterface
 	d           *data.Data
 	cleanup     func(name ...string)
@@ -93,6 +95,7 @@ func (m *Module) Init(conf *config.Config, em ext.ManagerInterface) (err error) 
 func (m *Module) PostInit() error {
 	m.s = service.New(m.conf, m.d)
 	m.h = handler.New(m.s)
+	m.r = router.New(m.h)
 
 	return nil
 }
@@ -104,10 +107,10 @@ func (m *Module) Name() string {
 
 // RegisterRoutes registers routes for the module
 func (m *Module) RegisterRoutes(r *gin.RouterGroup) {
-	if m.h == nil {
+	if m.r == nil {
 		return
 	}
-	m.h.RegisterRoutes(r.Group("/" + name))
+	m.r.RegisterRoutes(r)
 }
 
 // GetHandlers returns the handlers for the module

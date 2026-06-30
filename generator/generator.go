@@ -11,11 +11,12 @@ import (
 
 // Options defines code generation options
 type Options struct {
-	Name       string
-	Type       string
-	CustomDir  string
-	OutputPath string
-	ModuleName string
+	Name        string
+	Type        string
+	ProjectType string
+	CustomDir   string
+	OutputPath  string
+	ModuleName  string
 
 	UseMongo bool
 	UseEnt   bool
@@ -92,6 +93,7 @@ func prepareGeneration(opts *Options) (*Plan, *renderPlan, error) {
 	}
 
 	opts.Name = strings.TrimSpace(opts.Name)
+	opts.ProjectType = strings.TrimSpace(opts.ProjectType)
 	opts.ModuleName = strings.TrimSpace(opts.ModuleName)
 	opts.OutputPath = strings.TrimSpace(opts.OutputPath)
 	opts.CustomDir = strings.TrimSpace(opts.CustomDir)
@@ -142,6 +144,16 @@ func prepareGeneration(opts *Options) (*Plan, *renderPlan, error) {
 }
 
 func normalizeOptions(opts *Options) error {
+	if opts.Standalone {
+		projectType, err := normalizeProjectType(opts.ProjectType)
+		if err != nil {
+			return err
+		}
+		opts.ProjectType = projectType
+	} else {
+		opts.ProjectType = ""
+	}
+
 	opts.DBDriver = strings.ToLower(strings.TrimSpace(opts.DBDriver))
 
 	if opts.DBDriver == "postgresql" {
@@ -164,6 +176,12 @@ func normalizeOptions(opts *Options) error {
 	if opts.UseMongo && opts.DBDriver == "" {
 		opts.DBDriver = "mongodb"
 	}
+	if opts.Standalone && opts.ProjectType == ProjectTypeModular && opts.DBDriver == "" && !opts.UseMongo {
+		opts.DBDriver = "postgres"
+	}
+	if opts.Standalone && opts.ProjectType == ProjectTypeModular && (opts.UseEnt || opts.UseGorm) && opts.DBDriver == "" {
+		opts.DBDriver = "postgres"
+	}
 
 	if opts.UseEnt && opts.UseGorm {
 		return fmt.Errorf("use either --use-ent or --use-gorm, not both")
@@ -172,8 +190,8 @@ func normalizeOptions(opts *Options) error {
 		return fmt.Errorf("use --use-mongo without --use-ent or --use-gorm")
 	}
 
-	needsStandaloneData := opts.Standalone || opts.WithCmd
-	if opts.DBDriver != "" && opts.DBDriver != "none" && !opts.UseMongo && !opts.UseEnt && !opts.UseGorm {
+	needsStandaloneData := (opts.Standalone && opts.ProjectType != ProjectTypeModular) || (!opts.Standalone && opts.WithCmd)
+	if needsStandaloneData && opts.DBDriver != "" && opts.DBDriver != "none" && !opts.UseMongo && !opts.UseEnt && !opts.UseGorm {
 		opts.UseEnt = true
 	}
 	if needsStandaloneData && !opts.UseMongo && !opts.UseEnt && !opts.UseGorm {
@@ -205,6 +223,8 @@ func getMainTemplate(typ string) func(string) string {
 	switch typ {
 	case "core":
 		return templates.CoreTemplate
+	case "biz":
+		return templates.BusinessTemplate
 	case "business":
 		return templates.BusinessTemplate
 	case "plugin":

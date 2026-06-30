@@ -39,21 +39,24 @@ nco -h
 nco --help
 ```
 
-`nco init` creates a standalone ncore application. `nco create` adds an extension
-module to an existing project. Migration and schema commands require Atlas.
+`nco init` creates a standalone service or a modular product backend. `nco create`
+adds an extension module to an existing project. Migration and schema commands require Atlas.
 
 ## `nco init`
 
-Create a standalone application.
+Create an application. The default type is `service`; use `--type modular` for a
+product backend with `core`, `biz`, `plugin`, and `internal/server` structure.
 
 ```bash
 nco init myapp --db postgres --use-ent --use-redis --with-test
+nco init product --type modular --db postgres --use-redis --use-meilisearch --with-test
 ```
 
 ### Flags
 
 | Flag | Description |
 | --- | --- |
+| `-t, --type` | Init type: `service`, `modular` |
 | `--db` | Database driver: `postgres`, `mysql`, `sqlite`, `mongodb` |
 | `--use-ent` | Use Ent for SQL databases |
 | `--use-gorm` | Use GORM for SQL databases |
@@ -79,6 +82,7 @@ nco init myapp --db postgres --use-ent --use-redis --with-test
 
 ```bash
 nco init api --db postgres --use-ent --with-test
+nco init product --type modular --db postgres --use-redis --use-meilisearch --with-test
 nco init service --db postgres --use-ent --use-kafka --use-redis
 nco init files --db postgres --use-ent --use-s3
 nco init analytics --db mongodb --use-mongo
@@ -97,6 +101,7 @@ nco create core auth --use-ent --with-test
 | Type | Target path | Purpose |
 | --- | --- | --- |
 | `core` | `core/<name>` | Foundational domain modules |
+| `biz` | `biz/<name>` | Product business modules |
 | `business` | `business/<name>` | Application-specific modules |
 | `plugin` | `plugin/<name>` | Optional integration modules |
 | Custom | `<type>/<name>` | Project-defined module groups |
@@ -121,6 +126,7 @@ nco create core auth --use-ent --with-test
 
 ```bash
 nco create core auth --use-ent --with-test
+nco create biz order --use-ent --with-test
 nco create business order --use-gorm --with-cmd
 nco create plugin payment --use-mongo
 nco create features notification --use-ent
@@ -153,6 +159,32 @@ myapp/
 
 Generated projects follow the handler, service, repository, and data layering
 used by ncore-based services.
+
+## Generated Modular Structure
+
+```text
+myapp/
+├── cmd/myapp/
+├── core/
+├── biz/
+├── plugin/
+├── internal/
+│   ├── middleware/
+│   ├── server/
+│   └── version/
+├── migrations/
+├── docs/
+├── tests/
+├── config.yaml
+├── go.mod
+├── Makefile
+└── README.md
+```
+
+Modular applications keep process startup and cross-cutting HTTP composition in
+`internal/server`. Domain modules should be added with `nco create` and should keep
+their own `structs`, `data/schema`, `data/repository`, `service`, `handler`, and
+`router` packages.
 
 ## Configuration
 

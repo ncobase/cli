@@ -84,3 +84,45 @@ func TestGenerateRejectsMultipleStorageDrivers(t *testing.T) {
 		t.Fatal("expected storage driver conflict error")
 	}
 }
+
+func TestGenerateModularDryRunBuildsProductPlan(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts := DefaultOptions()
+	opts.Name = "product"
+	opts.Type = "direct"
+	opts.ProjectType = ProjectTypeModular
+	opts.Standalone = true
+	opts.WithCmd = true
+	opts.OutputPath = tmpDir
+	opts.DryRun = true
+
+	result, err := Generate(opts)
+	if err != nil {
+		t.Fatalf("modular dry-run generation failed: %v", err)
+	}
+	if result.Plan.ProjectType != ProjectTypeModular {
+		t.Fatalf("unexpected project type: %q", result.Plan.ProjectType)
+	}
+	if result.Plan.Database.Driver != "postgres" {
+		t.Fatalf("expected modular init to default to postgres, got %q", result.Plan.Database.Driver)
+	}
+	for _, expected := range []string{"core/doc.go", "biz/doc.go", "plugin/doc.go", "internal/server/http.go"} {
+		if !containsString(result.Plan.Files, expected) {
+			t.Fatalf("expected modular plan file %q in %#v", expected, result.Plan.Files)
+		}
+	}
+	for _, operation := range result.Plan.Operations {
+		if operation.Name == "generate Ent client" {
+			t.Fatalf("modular root plan must not run root Ent generation: %#v", result.Plan.Operations)
+		}
+	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}

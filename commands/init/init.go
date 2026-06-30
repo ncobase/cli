@@ -11,11 +11,12 @@ import (
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init [name]",
-		Short: "Initialize a new standalone application",
-		Long: `Initialize a new standalone application with complete project structure.
+		Short: "Initialize a new ncore application",
+		Long: `Initialize a new ncore application with complete project structure.
 
 Examples:
   nco init myapp
+  nco init myapp --type modular --db postgres --use-redis --use-meilisearch
   nco init myapp --path ./apps --use-ent --db postgres
   nco init myapp --use-redis --use-kafka`,
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -35,7 +36,7 @@ Examples:
 			opts.Standalone = true
 			opts.WithCmd = true
 
-			output, err := generation.ReadFlags(cmd, opts, generation.FlagConfig{Path: true})
+			output, err := generation.ReadFlags(cmd, opts, generation.FlagConfig{Path: true, Type: true})
 			if err != nil {
 				return err
 			}
@@ -48,7 +49,7 @@ Examples:
 		},
 	}
 
-	generation.AddFlags(cmd, generation.FlagConfig{Path: true})
+	generation.AddFlags(cmd, generation.FlagConfig{Path: true, Type: true})
 
 	return cmd
 }
